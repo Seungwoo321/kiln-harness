@@ -16,7 +16,8 @@ export const STATUS_SCHEMA = {
 // 사람의 응답을 기다리며 헤드리스 실행을 멈춘다(실측: 해석 단계 15분 정지). 래퍼를 PATH 에서 빼고 훅을 끈다.
 export function cleanEnv(env = process.env) {
   const path = (env.PATH ?? '').split(':').filter((d) => d && !/cmux-cli-shims/.test(d)).join(':');
-  return { ...env, PATH: path, CMUX_CLAUDE_HOOKS_DISABLED: '1' };
+  // 상위 폴더의 CLAUDE.md·AGENTS.md 체인을 읽지 않게 한다 — 사례 폴더가 큰 워크스페이스 아래에 있어도 세션마다 수만 토큰이 붙지 않는다(실측 7.8만 → 2.0만).
+  return { ...env, PATH: path, CMUX_CLAUDE_HOOKS_DISABLED: '1', CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1' };
 }
 export function which(cmd, pathString) {
   if (cmd.includes('/')) return cmd;

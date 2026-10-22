@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { detectKind, classify, materialize, resolveRoot } from './intake.mjs';
+import { detectKind, classify, materialize, resolveRoot, insidePluginInstall } from './intake.mjs';
 
 const CLI = join(import.meta.dirname, 'intake.mjs');
 const OPENAPI = `openapi: 3.0.0\ninfo: {title: t, version: '1'}\npaths:\n  /v1/things:\n    get:\n      operationId: listThings\n      summary: 목록\n`;
@@ -73,13 +73,24 @@ test('생성: mode:reference 는 원래 경로를 가리키고, 같은 이름은
   assert.ok(materialize({ case: 'c2', items: [{ path: m.plan, role: 'plan' }] }, root, { force: true }));
 });
 
-test('cases 폴더 결정: 명시 > 환경변수 > ./cases > ./kiln-cases', () => {
+test('cases 폴더 결정: 명시 > 환경변수 > ./cases > ./.local/kiln-cases > ./kiln-cases', () => {
   const cwd = mkdtempSync(join(tmpdir(), 'kh-cwd-'));
   assert.equal(resolveRoot('/x/y', cwd, {}), '/x/y');
   assert.equal(resolveRoot(null, cwd, { KH_CASES_DIR: '/e/c' }), '/e/c');
   assert.equal(resolveRoot(null, cwd, {}), join(cwd, 'kiln-cases'));
+  mkdirSync(join(cwd, '.local'));
+  assert.equal(resolveRoot(null, cwd, {}), join(cwd, '.local', 'kiln-cases'));
   mkdirSync(join(cwd, 'cases'));
   assert.equal(resolveRoot(null, cwd, {}), join(cwd, 'cases'));
+});
+
+test('사례 폴더는 플러그인 설치 폴더 안에 만들지 않는다(개발용 git 체크아웃은 예외)', () => {
+  const plugin = mkdtempSync(join(tmpdir(), 'kh-plugin-'));
+  assert.equal(insidePluginInstall(join(plugin, 'cases'), plugin), true);
+  assert.equal(insidePluginInstall(plugin, plugin), true);
+  assert.equal(insidePluginInstall(join(tmpdir(), 'elsewhere'), plugin), false);
+  mkdirSync(join(plugin, '.git'));
+  assert.equal(insidePluginInstall(join(plugin, 'cases'), plugin), false);
 });
 
 test('명령줄: 만들고 등록·추출·카탈로그까지 돌려 미리보기와 다음 명령을 보여 준다', () => {

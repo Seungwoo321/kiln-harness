@@ -1,12 +1,22 @@
 {
   "name": "kiln-harness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "기획·디자인 산출물과 현재 코드·API 계약을 합쳐 바로 구현에 들어갈 수 있는 작업계획으로 변환하는 하네스. 입력 정의(start)와 결정 기록(decide) 스킬 + 터미널 파이프라인(claude/codex 러너).",
-  "author": { "name": "Seungwoo321" },
+  "author": {
+    "name": "Seungwoo321"
+  },
   "homepage": "https://github.com/Seungwoo321/kiln-harness",
   "repository": "https://github.com/Seungwoo321/kiln-harness",
   "license": "MIT",
-  "keywords": ["planning", "design", "workplan", "requirements", "harness", "claude-code", "codex"],
+  "keywords": [
+    "planning",
+    "design",
+    "workplan",
+    "requirements",
+    "harness",
+    "claude-code",
+    "codex"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "kiln-harness",
@@ -14,7 +24,11 @@
     "longDescription": "기획 HTML·문서, 디자인 시안, API 스펙, 현재 코드 레포를 모아 범위·요구사항·상태·컴포넌트 배치·API 연결·질문을 담은 작업계획을 만든다. 같은 입력이면 같은 형식이 나오도록 결정적 게이트가 검증하고, 판단은 Claude Code 나 Codex 에이전트가 단계마다 새 세션으로 수행한다.",
     "developerName": "Seungwoo321",
     "category": "Productivity",
-    "capabilities": ["Interactive", "Read", "Write"],
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
     "defaultPrompt": [
       "이 기획서와 디자인 시안으로 작업계획을 만들 수 있게 입력을 정리해줘",
       "리뷰 화면의 R-07 은 기존 패턴을 따르기로 결정을 남겨줘"

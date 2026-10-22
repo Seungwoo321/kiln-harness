@@ -45,11 +45,19 @@ function gitRoot(dir) {
   try { return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 }
 
+// cases 폴더: 명시 > KH_CASES_DIR > ./cases(있으면) > ./.local/kiln-cases(.local 이 있으면 — 보통 git 에서 제외된 로컬 산출물 자리) > ./kiln-cases
 export function resolveRoot(explicit, cwd = process.cwd(), env = process.env) {
   if (explicit) return resolve(explicit);
   if (env.KH_CASES_DIR) return resolve(env.KH_CASES_DIR);
   if (existsSync(join(cwd, 'cases'))) return join(cwd, 'cases');
+  if (existsSync(join(cwd, '.local'))) return join(cwd, '.local', 'kiln-cases');
   return join(cwd, 'kiln-cases');
+}
+
+// 사례(업무 자료)는 플러그인 설치 폴더 안에 만들지 않는다. .git 이 있는 체크아웃(개발용)은 예외다.
+export function insidePluginInstall(root, pluginRoot) {
+  const r = resolve(root); const p = resolve(pluginRoot);
+  return (r === p || r.startsWith(`${p}/`)) && !existsSync(join(p, '.git'));
 }
 
 // spec → 분류 결과(부수효과 없음). 오류는 모아서 한 번에 던진다.
@@ -123,6 +131,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (!specPath) { process.stderr.write('usage: node scripts/intake.mjs --spec <spec.json> [--root <cases 폴더>] [--dry] [--force]\n'); process.exit(2); }
   const spec = JSON.parse(readFileSync(resolve(specPath), 'utf8'));
   const root = resolveRoot(opt('--root'));
+  if (insidePluginInstall(root, join(HERE, '..'))) { process.stderr.write(`사례 폴더를 플러그인 설치 폴더 안에 만들 수 없다 — 작업 폴더(주제 폴더)에서 실행하거나 --root 로 밖의 경로를 준다.\n  (${root})\n`); process.exit(1); }
   const { items, errors, warnings } = classify(spec);
   const table = items.map((x) => `  ${x.id.padEnd(22)} ${x.role.padEnd(15)} ${x.kind.padEnd(13)} ${x.kind === 'code' ? `git ${x.repo} @ ${x.ref}${x.paths.length ? ` [${x.paths.join(', ')}]` : ''}` : `${x.mode === 'copy' ? '복사' : '참조'} ← ${x.source}`}`).join('\n');
   if (errors.length) { process.stderr.write(`입력 정의를 만들 수 없다:\n${errors.map((e) => `  ✗ ${e}`).join('\n')}\n`); process.exit(1); }

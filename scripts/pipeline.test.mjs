@@ -225,7 +225,7 @@ test('러너 명령: 세션 모드별 플래그', () => {
 
 test('러너 환경: 터미널 래퍼를 PATH 에서 빼고 권한 대화를 열지 않는다', () => {
   const env = cleanEnv({ PATH: '/tmp/x/cmux-cli-shims/ABC:/usr/bin:/bin', HOME: '/h' });
-  assert.equal(env.PATH, '/usr/bin:/bin'); assert.equal(env.CMUX_CLAUDE_HOOKS_DISABLED, '1'); assert.equal(env.HOME, '/h');
+  assert.equal(env.PATH, '/usr/bin:/bin'); assert.equal(env.CMUX_CLAUDE_HOOKS_DISABLED, '1'); assert.equal(env.CLAUDE_CODE_DISABLE_CLAUDE_MDS, '1'); assert.equal(env.HOME, '/h');
   assert.equal(which('/abs/claude', '/usr/bin'), '/abs/claude'); assert.equal(which('definitely-not-a-cmd', '/usr/bin'), 'definitely-not-a-cmd');
   const args = buildCommand({ runner: 'claude', role: 'R', prompt: 'P', cwd: '/c' }).args;
   assert.equal(args[args.indexOf('--permission-mode') + 1], 'dontAsk');

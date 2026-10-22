@@ -37,7 +37,7 @@ description: 기획·디자인 산출물을 개발 계획서로 바꾸는 작업
    ```bash
    node "$KH/scripts/intake.mjs" --spec <spec.json> --dry
    ```
-   분류 표를 사용자에게 보여 주고 고칠 곳이 없으면 `--dry` 를 빼고 실행한다. 오류(경로 없음·읽을 수 없는 형식 등)는 사유대로 고쳐서 다시 한다. cases 폴더는 `--root` > `KH_CASES_DIR` > `./cases` > `./kiln-cases` 순으로 정해진다.
+   분류 표를 사용자에게 보여 주고 고칠 곳이 없으면 `--dry` 를 빼고 실행한다. 오류(경로 없음·읽을 수 없는 형식 등)는 사유대로 고쳐서 다시 한다. cases 폴더는 `--root` > `KH_CASES_DIR` > `./cases` > `./.local/kiln-cases`(`.local` 이 있으면) > `./kiln-cases` 순으로 정해진다. 사례는 업무 자료이므로 **작업 폴더(세션을 연 폴더) 쪽에 두고 플러그인 설치 폴더 안에는 만들지 않는다** — 스크립트가 거부한다.
 5. **결과를 안내한다.** 만들어진 사례 폴더, 참조 카탈로그 요약(역할별 자료와 **없는 자료 경고**), 스크립트가 출력한 실행 명령을 그대로 전한다. 덧붙일 것:
    - 계정을 나눠 쓰면 작업에 맞는 계정의 설정 폴더로 실행한다: `export CLAUDE_CONFIG_DIR=<설정 폴더>` (codex 는 `CODEX_HOME`).
    - 처음에는 `--attempts 3 --loops 1` 로 비용 상한을 둔다. 모델·러너는 `kh.config.json` 이나 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT>` 환경변수로 바꾼다.
