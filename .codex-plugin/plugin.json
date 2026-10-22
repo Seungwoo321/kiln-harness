@@ -1,6 +1,6 @@
 {
   "name": "kiln-harness",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "기획·디자인 산출물과 현재 코드·API 계약을 합쳐 바로 구현에 들어갈 수 있는 작업계획으로 변환하는 하네스. 입력 정의(start)와 결정 기록(decide) 스킬 + 터미널 파이프라인(claude/codex 러너).",
   "author": {
     "name": "Seungwoo321"
