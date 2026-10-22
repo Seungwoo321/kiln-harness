@@ -45,12 +45,11 @@ function gitRoot(dir) {
   try { return execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 }
 
-// cases 폴더: 명시 > KH_CASES_DIR > ./cases(있으면) > ./.local/kiln-cases(.local 이 있으면 — 보통 git 에서 제외된 로컬 산출물 자리) > ./kiln-cases
+// cases 폴더: 명시 > KH_CASES_DIR > ./cases(있으면) > ./kiln-cases. 사례(입력·계획서)는 구현 세션이 참조하는 산출물이므로 숨김·휘발 폴더(.local 등)에 두지 않는다.
 export function resolveRoot(explicit, cwd = process.cwd(), env = process.env) {
   if (explicit) return resolve(explicit);
   if (env.KH_CASES_DIR) return resolve(env.KH_CASES_DIR);
   if (existsSync(join(cwd, 'cases'))) return join(cwd, 'cases');
-  if (existsSync(join(cwd, '.local'))) return join(cwd, '.local', 'kiln-cases');
   return join(cwd, 'kiln-cases');
 }
 

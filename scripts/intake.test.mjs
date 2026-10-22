@@ -73,13 +73,13 @@ test('생성: mode:reference 는 원래 경로를 가리키고, 같은 이름은
   assert.ok(materialize({ case: 'c2', items: [{ path: m.plan, role: 'plan' }] }, root, { force: true }));
 });
 
-test('cases 폴더 결정: 명시 > 환경변수 > ./cases > ./.local/kiln-cases > ./kiln-cases', () => {
+test('cases 폴더 결정: 명시 > 환경변수 > ./cases > ./kiln-cases (.local 같은 숨김 폴더는 고르지 않는다)', () => {
   const cwd = mkdtempSync(join(tmpdir(), 'kh-cwd-'));
   assert.equal(resolveRoot('/x/y', cwd, {}), '/x/y');
   assert.equal(resolveRoot(null, cwd, { KH_CASES_DIR: '/e/c' }), '/e/c');
   assert.equal(resolveRoot(null, cwd, {}), join(cwd, 'kiln-cases'));
   mkdirSync(join(cwd, '.local'));
-  assert.equal(resolveRoot(null, cwd, {}), join(cwd, '.local', 'kiln-cases'));
+  assert.equal(resolveRoot(null, cwd, {}), join(cwd, 'kiln-cases')); // .local 이 있어도 쓰지 않는다
   mkdirSync(join(cwd, 'cases'));
   assert.equal(resolveRoot(null, cwd, {}), join(cwd, 'cases'));
 });
