@@ -1,0 +1,17 @@
+{
+  "name": "kiln-harness",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.7.0",
+  "scripts": {
+    "run": "node scripts/run.mjs",
+    "register": "node scripts/register.mjs",
+    "extract": "node scripts/extract.mjs",
+    "validate": "node scripts/validate.mjs",
+    "render": "node scripts/render.mjs",
+    "test": "node --test 'scripts/*.test.mjs'"
+  }
+}

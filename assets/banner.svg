@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-label="kiln-harness — 기획·디자인 산출물을 개발 작업계획으로">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22304f"/><stop offset="1" stop-color="#0e1525"/></linearGradient>
+    <linearGradient id="fire" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff6a13"/><stop offset="1" stop-color="#ffd166"/></linearGradient>
+  </defs>
+  <rect width="1280" height="320" rx="28" fill="url(#bg)"/>
+  <g transform="translate(72 52) scale(.43)">
+    <path d="M132 404V252a124 124 0 0 1 248 0V404" fill="none" stroke="#8da2c8" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M256 140c10 38 66 70 66 128a66 66 0 0 1-132 0c0-32 14-52 32-72 2 24 12 36 26 42-8-34-4-70 8-98z" fill="url(#fire)"/>
+    <path d="M256 250c6 22 30 38 30 62a30 30 0 0 1-60 0c0-16 8-26 18-36 2 12 8 18 12 20z" fill="#fff3d6" opacity=".9"/>
+    <rect x="104" y="404" width="304" height="26" rx="13" fill="#8da2c8"/>
+  </g>
+  <text x="330" y="150" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="76" font-weight="700" fill="#f3f6fb">kiln-harness</text>
+  <text x="332" y="205" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="30" fill="#aab8d4">기획·디자인 산출물 + 현재 코드·API 계약 → 바로 구현에 들어가는 작업계획</text>
+  <text x="332" y="252" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="22" fill="#7f90b3">same inputs, same plan · node scripts + claude / codex agents</text>
+</svg>

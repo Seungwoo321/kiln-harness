@@ -1,0 +1,9 @@
+# 사례(case)는 실제 업무 자료와 그 해석을 담으므로 레포에 올리지 않는다. cases/ 폴더 자체만 .gitkeep 으로 유지한다.
+cases/*
+!cases/.gitkeep
+kiln-cases/
+node_modules/
+.local/
+tmp/
+.DS_Store
+pnpm-lock.yaml

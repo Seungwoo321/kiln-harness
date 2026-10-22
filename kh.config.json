@@ -1,0 +1,27 @@
+{
+  "limits": {
+    "stageAttempts": 3,
+    "loopAttempts": 3,
+    "timeoutSec": 1800
+  },
+  "stages": {
+    "scope": {
+      "runner": "claude",
+      "model": "opus",
+      "effort": "medium",
+      "session": "chain"
+    },
+    "interpret": {
+      "runner": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "session": "chain"
+    },
+    "critic": {
+      "runner": "claude",
+      "model": "opus",
+      "effort": "high",
+      "session": "fresh"
+    }
+  }
+}
