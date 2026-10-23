@@ -217,6 +217,10 @@ function addDirs(dir, registry) {
   return [...new Set([ROOT, ...prev, ...registry.sources.map((s) => (s.kind === 'code' ? s.repo : dirname(s.path)))])];
 }
 
+function gitRepos(registry) {
+  return [...new Set(registry.sources.filter((s) => s.kind === 'code').map((s) => s.repo))];
+}
+
 // 같은 주제(사례) 안에서는 세션 id 로 이전 컨텍스트를 잇는다. 오케스트레이터가 UUID 를 정해 첫 호출은 새 세션으로, 이후는 같은 id 로 이어간다.
 // session:'fresh' 인 단계(기본: critic — 생산자≠검증자)는 항상 1회성 새 세션이다.
 function sessionFor(cfg, chain) {
@@ -232,7 +236,7 @@ export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, ou
     if (outFile) rmSync(join(dir, 'stages', outFile), { force: true });
     deps.log(name, `시도 ${n}/${limits.stageAttempts}${feedback.length ? ` (위반 ${feedback.length}건 반영)` : ''} · ${cfg.runner}/${cfg.model ?? '기본'}${cfg.effort ? `/${cfg.effort}` : ''}`);
     const session = sessionFor(cfg, chain);
-    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: role(name), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), timeoutSec: limits.timeoutSec, session });
+    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: role(name), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), gitRepos: gitRepos(registry), timeoutSec: limits.timeoutSec, session });
     if (session) {
       const id = res.sessionId ?? session.id;
       if (res.ok && id) { chain.ids[cfg.runner] = id; chain.started[cfg.runner] = true; } else if (session.mode === 'resume') { delete chain.ids[cfg.runner]; chain.started[cfg.runner] = false; } // 이어가기에 실패하면 다음 시도는 새 세션

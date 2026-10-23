@@ -137,12 +137,14 @@ test('비평의 지적에 근거(evidence)가 없으면 막힌다', () => {
 });
 
 test('러너 명령: claude 와 codex 는 같은 입력으로 각자의 플래그를 만든다', () => {
-  const spec = { model: 'm1', effort: 'high', role: 'ROLE', prompt: 'P', cwd: '/c', addDirs: ['/d'], schemaFile: '/s.json' };
+  const spec = { model: 'm1', effort: 'high', role: 'ROLE', prompt: 'P', cwd: '/c', addDirs: ['/d'], gitRepos: ['/r'], schemaFile: '/s.json' };
   const c = buildCommand({ ...spec, runner: 'claude' });
   assert.ok(c.args.includes('--json-schema') && c.args.includes('--no-session-persistence') && c.args.includes('--strict-mcp-config'));
   assert.equal(c.args[c.args.indexOf('--model') + 1], 'm1'); assert.equal(c.args[c.args.indexOf('--effort') + 1], 'high');
   assert.ok(c.args.includes('Write(stages/**)')); assert.ok(!c.args.includes('--dangerously-skip-permissions'));
   assert.ok(c.args.includes('--add-dir'));
+  assert.ok(c.args.includes('Bash(git -C /r show:*)') && c.args.includes('Bash(git -C /r grep:*)'));
+  assert.ok(!c.args.some((a) => /git -C \*|commit|push|checkout/.test(a)));
   const x = buildCommand({ ...spec, runner: 'codex' });
   assert.equal(x.args[0], 'exec'); assert.ok(x.args.includes('--output-schema') && x.args.includes('--ephemeral'));
   assert.equal(x.args[x.args.indexOf('-m') + 1], 'm1'); assert.ok(x.args.includes('model_reasoning_effort=high'));

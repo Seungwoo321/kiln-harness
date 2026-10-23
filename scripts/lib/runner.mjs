@@ -29,23 +29,26 @@ export function which(cmd, pathString) {
 
 // 읽기만 하는 도구와 stages/ 아래 쓰기만 허용한다. 원본·코드·결정 파일은 에이전트가 쓸 수 없다.
 const CLAUDE_TOOLS = 'Read,Grep,Glob,Write,Edit,Bash';
+// 카탈로그가 알려 주는 읽기 명령은 `git -C <repo> show ...` 형태라 `git show:*` 로는 매치되지 않는다(dontAsk 에서 조용히 거부된다).
+// 와일드카드(`git -C * show *`)는 `git -C x commit -m "show"` 까지 매치하므로, 등록된 저장소 경로를 규칙에 직접 박는다.
+export const gitReadRules = (repos = []) => repos.flatMap((r) => ['show', 'ls-tree', 'grep', 'cat-file'].map((c) => `Bash(git -C ${r} ${c}:*)`));
 export const claudeAllowed = (extraBash = []) => [
   'Read', 'Grep', 'Glob', 'Write(stages/**)', 'Edit(stages/**)',
   'Bash(git show:*)', 'Bash(git ls-tree:*)', 'Bash(git grep:*)', 'Bash(git cat-file:*)', 'Bash(sed:*)', 'Bash(head:*)', 'Bash(wc:*)', 'Bash(ls:*)',
   ...extraBash,
 ];
 
-// spec: { runner, model?, effort?, role, prompt, cwd, addDirs?, schemaFile, session? }  →  { cmd, args, cwd }
+// spec: { runner, model?, effort?, role, prompt, cwd, addDirs?, gitRepos?, schemaFile, session? }  →  { cmd, args, cwd }
 // session: 없으면 1회성(세션을 남기지 않는다). { mode:'new', id? } 는 세션을 남기며 시작, { mode:'resume', id } 는 그 세션을 이어간다.
 export function buildCommand(spec) {
-  const { runner, model, effort, role, prompt, cwd, addDirs = [], schemaFile, session } = spec;
+  const { runner, model, effort, role, prompt, cwd, addDirs = [], gitRepos = [], schemaFile, session } = spec;
   if (runner === 'claude') {
     const sessionArgs = session?.mode === 'resume' ? ['--resume', session.id] : session?.mode === 'new' ? ['--session-id', session.id] : ['--no-session-persistence'];
     const args = ['-p', prompt, '--output-format', 'json', ...sessionArgs,
       '--json-schema', JSON.stringify(STATUS_SCHEMA), '--append-system-prompt', role,
       // 앰비언트 컨텍스트(전역 규칙·훅·스킬·MCP)를 끊는다 — 실측 약 2.8만 → 3천 토큰.
       '--setting-sources', 'project', '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
-      '--exclude-dynamic-system-prompt-sections', '--permission-mode', 'dontAsk', '--tools', CLAUDE_TOOLS, '--allowedTools', ...claudeAllowed()];
+      '--exclude-dynamic-system-prompt-sections', '--permission-mode', 'dontAsk', '--tools', CLAUDE_TOOLS, '--allowedTools', ...claudeAllowed(gitReadRules(gitRepos))];
     if (model) args.push('--model', model);
     if (effort) args.push('--effort', effort);
     for (const d of addDirs) args.push('--add-dir', d);
