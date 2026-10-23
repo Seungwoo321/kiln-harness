@@ -17,6 +17,7 @@ import { render } from '../render.mjs';
 import { renderReview } from '../render-review.mjs';
 import { readDecisions } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
+import { createLive, createTicker } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -251,7 +252,9 @@ export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, ou
     if (outFile) rmSync(join(dir, 'stages', outFile), { force: true });
     deps.log(name, `시도 ${n}/${limits.stageAttempts}${feedback.length ? ` (위반 ${feedback.length}건 반영)` : ''} · ${cfg.runner}/${cfg.model ?? '기본'}${cfg.effort ? `/${cfg.effort}` : ''}`);
     const session = sessionFor(cfg, chain);
-    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: role(name), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), gitRepos: gitRepos(registry), timeoutSec: limits.timeoutSec, session });
+    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: role(name), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), gitRepos: gitRepos(registry), timeoutSec: limits.timeoutSec, session, logName: `${name}-${n}`,
+      onTick: deps.tick ? (t) => deps.tick({ stage: name, attempt: n, max: limits.stageAttempts, cfg, ...t }) : undefined });
+    deps.tickEnd?.();
     if (session) {
       const id = res.sessionId ?? session.id;
       if (res.ok && id) { chain.ids[cfg.runner] = id; chain.started[cfg.runner] = true; } else if (session.mode === 'resume') { delete chain.ids[cfg.runner]; chain.started[cfg.runner] = false; } // 이어가기에 실패하면 다음 시도는 새 세션
@@ -301,7 +304,8 @@ export const changedIds = (before, after) => { const a = itemIds(before); const 
 // ── 파이프라인 ──────────────────────────────────────────────────────────────
 export function runPipeline(rawDir, opts = {}, injected = {}) {
   const dir = resolve(rawDir);
-  const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => process.stdout.write(`[${s}] ${m}\n`)) };
+  const live = createLive();
+  const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => live.print(`[${s}] ${m}`)) };
   const cfg = loadConfig(dir, opts.env ?? process.env);
   const level = opts.level !== undefined ? parseLevel(opts.level) : cfg.level;
   const limits = { ...cfg.limits, ...(opts.stageAttempts ? { stageAttempts: opts.stageAttempts } : {}), ...(opts.loopAttempts ? { loopAttempts: opts.loopAttempts } : {}) };
@@ -339,6 +343,12 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const baseScope = reuseScope ? readJson(join(dir, 'scope.json')) : null;
 
   const stats = Object.fromEntries(STAGES.map((s) => [s, { ...newStat(), result: 'pending' }]));
+  if (!injected.runAgent && !injected.log) {
+    // 실제 실행(테스트가 아님)일 때만 터미널에 진행 상황을 그린다.
+    const startedAt = Date.now();
+    const ticker = createTicker({ live, root: dir, overview: () => ({ level, startedAt, stages: STAGES.map((s) => [s, stats[s].result]), totals: usage() }) });
+    deps.tick = ticker.tick; deps.tickEnd = ticker.end;
+  }
   const usage = () => STAGES.reduce((m, s) => ({ calls: m.calls + stats[s].calls, tokens: m.tokens + stats[s].tokens, seconds: m.seconds + stats[s].seconds, costUsd: Math.round((m.costUsd + stats[s].costUsd) * 1e4) / 1e4 }), newStat());
   let lessons = [];
   let lastViolations = [];

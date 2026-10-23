@@ -45,6 +45,10 @@ codex plugin add kiln-harness@kiln-harness
 
 환경변수 `KH_LEVEL`, `kh.config.json` 의 `"level"` 로도 정한다(우선순위: `--level` > `KH_LEVEL` > 사례 폴더 설정 > 기본 5).
 
+## 진행 상황 (실시간)
+
+`run.mjs` 를 돌리는 터미널에 에이전트가 도는 동안 같은 자리에서 갱신되는 진행 블록이 뜬다: 검토 수준·전체 경과·단계 흐름(`scope✓ interpret▶ critic·`), 지금 단계의 시도·러너·경과 시간·도구 호출 수·출력 토큰, **지금 읽고 쓰는 파일·명령**(최근 3개), 누적 호출·토큰·비용. 단계 결과([단계] 통과/위반 …)는 블록을 지우고 그대로 남는다. 파이프로 넘기거나 TTY 가 아니면 블록 없이 1분마다 한 줄 신호만 낸다. 에이전트 원본 출력은 `stages/.agent-<단계>-<시도>.log` 에 남는다(Claude 는 stream-json).
+
 ## 사용
 
 ```bash

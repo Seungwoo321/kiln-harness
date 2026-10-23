@@ -1,8 +1,8 @@
 // 에이전트 러너 — 같은 역할 md·프롬프트를 `claude -p` 또는 `codex exec` 로 1회성 실행한다. 단계마다 새 세션이다.
 // 모델·effort 는 이름을 코드에 박지 않고 설정(kh.config.json)에서 그대로 넘긴다 — 두 CLI 가 지원하는 모델이면 무엇이든 된다.
 // 에이전트는 파일을 쓰고(결과물), 최종 응답은 작은 상태 JSON 이다. 결과물의 합격 여부는 스크립트(게이트)가 판정한다.
-import { spawnSync } from 'node:child_process';
-import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync, accessSync, constants } from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
+import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync, accessSync, openSync, closeSync, constants } from 'node:fs';
 import { join } from 'node:path';
 
 export const STATUS_SCHEMA = {
@@ -44,7 +44,8 @@ export function buildCommand(spec) {
   const { runner, model, effort, role, prompt, cwd, addDirs = [], gitRepos = [], schemaFile, session } = spec;
   if (runner === 'claude') {
     const sessionArgs = session?.mode === 'resume' ? ['--resume', session.id] : session?.mode === 'new' ? ['--session-id', session.id] : ['--no-session-persistence'];
-    const args = ['-p', prompt, '--output-format', 'json', ...sessionArgs,
+    // stream-json: 도구 호출이 줄 단위로 로그에 쌓여 진행 상황을 볼 수 있다. 마지막 줄(result)이 json 형식과 같다.
+    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', ...sessionArgs,
       '--json-schema', JSON.stringify(STATUS_SCHEMA), '--append-system-prompt', role,
       // 앰비언트 컨텍스트(전역 규칙·훅·스킬·MCP)를 끊는다 — 실측 약 2.8만 → 3천 토큰.
       '--setting-sources', 'project', '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
@@ -85,26 +86,47 @@ function parseCodex(stdout, lastFile) {
 }
 
 // 실제 실행. 테스트는 이 함수 대신 가짜 runAgent 를 주입한다.
+// 에이전트는 자식 프로세스로 띄우고 출력은 로그 파일에 쌓는다. 부모는 그동안 깨어나(spec.onTick) 진행 상황을 그린다.
+// 같은 프로세스 그룹이라 Ctrl-C 가 에이전트에도 간다. 종료 여부는 ps 로 확인한다(이벤트 루프를 쓰지 않아 동기 API 를 유지한다).
+const alive = (pid) => {
+  if (!pid) return false;
+  try { const stat = execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim(); return stat !== '' && !stat.startsWith('Z'); } catch { return false; } // 종료했지만 아직 회수 전(Z)이면 끝난 것이다
+};
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
 export function runAgent(spec) {
   const work = join(spec.cwd, 'stages');
   mkdirSync(work, { recursive: true });
   const schemaFile = join(work, '.status.schema.json');
   const lastFile = join(work, '.last-message.json');
+  const logFile = join(work, `.agent-${spec.logName ?? spec.runner}.log`);
   writeFileSync(schemaFile, JSON.stringify(STATUS_SCHEMA));
   const { cmd, args, cwd } = buildCommand({ ...spec, schemaFile });
   const finalArgs = spec.runner === 'codex' ? [...args.slice(0, -1), '-o', lastFile, args.at(-1)] : args;
   rmSync(lastFile, { force: true });
   const started = Date.now();
   const env = cleanEnv();
-  const r = spawnSync(which(cmd, env.PATH), finalArgs, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 128 * 1024 * 1024, timeout: (spec.timeoutSec ?? 1800) * 1000 });
+  const fd = openSync(logFile, 'w');
+  let child;
+  try { child = spawn(which(cmd, env.PATH), finalArgs, { cwd, env, stdio: ['ignore', fd, fd] }); } finally { closeSync(fd); }
+  child.on('error', () => {}); // 실행 파일이 없으면 pid 가 없다 — 아래에서 판정한다
+  const deadline = started + (spec.timeoutSec ?? 1800) * 1000;
+  let timedOut = false;
+  while (alive(child.pid)) {
+    if (Date.now() > deadline) { try { child.kill('SIGKILL'); } catch { /* 이미 종료 */ } timedOut = true; break; }
+    spec.onTick?.({ elapsedSec: (Date.now() - started) / 1000, logFile, runner: spec.runner });
+    sleep(spec.tickMs ?? 1000);
+  }
   const seconds = Math.round((Date.now() - started) / 1000);
-  if (r.error) return { ok: false, status: null, error: `${cmd} 실행 실패 — ${r.error.message}`, tokens: null, costUsd: null, seconds };
-  if (r.status !== 0 && spec.runner === 'codex') return { ok: false, status: null, error: `${cmd} 종료 코드 ${r.status}: ${(r.stderr || r.stdout).slice(-400)}`, tokens: null, costUsd: null, seconds };
+  const out = existsSync(logFile) ? readFileSync(logFile, 'utf8') : '';
+  if (!child.pid) return { ok: false, status: null, error: `${cmd} 실행 실패 — 실행 파일을 찾을 수 없다`, tokens: null, costUsd: null, seconds };
+  if (timedOut) return { ok: false, status: null, error: `${cmd} 시간 초과(${spec.timeoutSec ?? 1800}초)`, tokens: null, costUsd: null, seconds };
   try {
-    const parsed = spec.runner === 'claude' ? parseClaude(r.stdout) : parseCodex(`${r.stdout}\n${r.stderr}`, lastFile);
+    const parsed = spec.runner === 'claude' ? parseClaude(out) : parseCodex(out, lastFile);
+    if (!parsed.ok && spec.runner === 'codex') return { ...parsed, error: `${cmd} 구조화 응답 없음: ${out.slice(-400)}`, seconds };
     return { ...parsed, seconds };
   } catch (e) {
-    return { ok: false, status: null, error: `응답을 해석하지 못했다 — ${e.message}: ${(r.stdout || r.stderr).slice(-300)}`, tokens: null, costUsd: null, seconds };
+    return { ok: false, status: null, error: `응답을 해석하지 못했다 — ${e.message}: ${out.slice(-300)}`, tokens: null, costUsd: null, seconds };
   }
 }
 
