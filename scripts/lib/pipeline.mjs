@@ -21,7 +21,8 @@ import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
 import { readDesignSpecs } from './design-policy.mjs';
-import { BLOCKING, judgmentErrors, conformanceBrief } from './conformance.mjs';
+import { BLOCKING, judgmentErrors, groundJudgments, conformanceBrief } from './conformance.mjs';
+import { seal } from '../design-spec.mjs';
 import { appendConformanceReview } from './conformance-view.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -162,7 +163,7 @@ export function criticGate(dir, registry, plan) {
   const verdicts = Array.isArray(crit.questionVerdicts) ? crit.questionVerdicts : [];
   const qids = (plan.questions ?? []).map((q) => q.id);
   const lineageConflicts = new Set((plan.lineage?.inherited ?? []).filter((x) => x.status === 'conflict').map((x) => x.question));
-  for (const q of plan.questions ?? []) if (q.designEvidence) lineageConflicts.add(q.id);
+  const designConflicts = new Set((plan.questions ?? []).filter(q => q.designEvidence).map(q => q.id));
   const inferredTargets = new Set([...(plan.requirements ?? []), ...(plan.states ?? [])].filter((x) => x.basis === 'inferred').map((x) => x.question));
   const demoted = new Map();
   const dropped = new Set();
@@ -173,6 +174,7 @@ export function criticGate(dir, registry, plan) {
     if (!['keep', 'demote', 'drop'].includes(v.verdict)) return out.push(`${w}: verdict 는 keep|demote|drop`);
     if (v.verdict === 'keep') return undefined;
     if (lineageConflicts.has(v.id)) return out.push(`${w}: 이전 결정과의 충돌 질문은 내리거나 제거할 수 없음 — ${v.id}`);
+    if (designConflicts.has(v.id)) return out.push(`${w}: 시안 동작 충돌 질문은 내리거나 제거할 수 없음 — ${v.id}`);
     if (v.verdict === 'drop') {
       if (!v.reason) out.push(`${w}: drop 은 reason 이 필요함`);
       if (inferredTargets.has(v.id)) out.push(`${w}: 추론 항목이 가리키는 notice 질문은 제거할 수 없음 — demote 하거나 keep 한다 (${v.id})`);
@@ -213,7 +215,7 @@ export function sourcesIntact(registry) {
 
 // ── 프롬프트 ────────────────────────────────────────────────────────────────
 const feedbackBlock = (title, items) => (items.length ? `\n\n[${title}]\n${items.map((e) => `- ${e}`).join('\n')}` : '');
-const role = (name) => `${readFileSync(join(ROOT, 'roles', `${name}.md`), 'utf8')}\n\n${readFileSync(join(ROOT, 'docs', 'writing.md'), 'utf8')}`;
+const role = (name) => readFileSync(join(ROOT, 'roles', `${name}.md`), 'utf8');
 
 function lineageBlock(stage, lin) {
   const head = `\n\n[후속 사례] 이전 사례 ${lin.previous.caseId} 의 후속 작업이다. 자세한 대조 결과는 lineage.json, 이전 기록은 이전 사례 폴더(${lin.previous.case})에 있다.\n- 현재 상태의 정본은 sources.json 이 고정한 실제 코드다. 결정 근거의 정본은 이전 사례의 기록(결정·열린 확인 요청·추론 항목)이다.`;
@@ -333,7 +335,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     execFileSync(process.execPath, [join(ROOT, 'scripts', 'design-spec.mjs'), dir], { env: { ...process.env, ...opts.env }, timeout: 600000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
     const violation = `S2d 렌더 실패: ${e.stderr?.toString() || e.message}`;
-    writeFileSync(join(dir, 'design-spec-status.json'), `${JSON.stringify({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: violation, sources: [] }, null, 2)}\n`);
+    writeFileSync(join(dir, 'design-spec-status.json'), `${JSON.stringify(seal({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: violation, sources: [] }), null, 2)}\n`);
     writeStatus(dir, { stage: 'design-spec', result: 'failed', violations: [violation] });
     return { ok: false, violations: [violation] };
   }
@@ -448,7 +450,8 @@ export const listFailed = (dir) => (existsSync(join(dir, 'failed')) ? readdirSyn
 
 export function conformanceGate(dir, facts) {
   const draft = tryJson(join(dir, 'stages', 'conformance.json'));
-  return { violations: judgmentErrors(draft, facts), value: draft };
+  const violations = judgmentErrors(draft, facts);
+  return { violations, value: violations.length ? draft : groundJudgments(draft, facts) };
 }
 
 // S8의 의미 판정은 이 러너가 별도 역할 세션으로 실행한다.
@@ -458,7 +461,7 @@ export function runConformance(rawDir, opts = {}, injected = {}) {
   if (sha256(canonical(body)) !== digest) throw new Error('conformance-facts digest 불일치');
   if (!Array.isArray(facts.facts) || !facts.facts.length) throw new Error('판정할 렌더·코드 사실이 없음');
   const cfg = loadConfig(dir, opts.env ?? process.env);
-  const fingerprint = sha256(canonical({ facts: digest, role: role('conformance'), config: cfg.stages.conformance }));
+  const fingerprint = sha256(canonical({ facts: digest, role: role('conformance'), contract: sha256(readFileSync(new URL('./conformance.mjs', import.meta.url))), config: cfg.stages.conformance }));
   const save = (report) => {
     writeFileSync(join(dir, 'conformance.json'), `${JSON.stringify(report, null, 2)}\n`);
     writeFileSync(join(dir, 'conformance-brief.md'), conformanceBrief(report));

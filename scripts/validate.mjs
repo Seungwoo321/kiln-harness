@@ -284,7 +284,7 @@ export function validate(caseDir, planOverride) {
       if (!ids.has(d.id)) err(w, `계획서에 없는 id — ${d.id}`);
     });
   }
-  try {
+  if (plan.schemaVersion >= 3) try {
     const specs = readDesignSpecs(caseDir, registry);
     const baseline = specs.length && existsSync(join(caseDir, 'component-baseline.json')) ? read('component-baseline.json') : { samples: [] };
     errors.push(...validateDesignPolicy(plan, registry, specs, locators, baseline));

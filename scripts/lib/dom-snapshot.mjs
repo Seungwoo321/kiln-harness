@@ -16,23 +16,21 @@ export async function snapshotDOM(options = {}) {
   const walkRules = (rules) => { for (const rule of rules) { if (rule.selectorText && rule.style) declarations.push(rule); else if (rule.cssRules && (!rule.conditionText || !rule.media || matchMedia(rule.conditionText).matches)) walkRules(rule.cssRules); } };
   for (const sheet of document.styleSheets) { try { walkRules(sheet.cssRules); } catch { /* cross-origin CSS: 계산값·테마 유지 */ } }
   const color = (el, prop, computed) => {
-    let token = null;
+    const candidateTokens = [];
     for (const rule of declarations) {
-      try { if (el.matches(rule.selectorText)) { const v = rule.style.getPropertyValue(prop).match(/var\((--[\w-]+)/); if (v) token = v[1]; } } catch { /* 비요소 선택자 */ }
+      try { if (el.matches(rule.selectorText)) for (const v of rule.style.getPropertyValue(prop).matchAll(/var\(\s*(--[\w-]+)/g)) candidateTokens.push({ token: v[1], selector: rule.selectorText, declaration: rule.style.getPropertyValue(prop), important: rule.style.getPropertyPriority(prop) === 'important' }); } catch { /* 비요소 선택자 */ }
     }
-    const inline = el.style.getPropertyValue(prop).match(/var\((--[\w-]+)/);
-    if (inline) token = inline[1];
-    return { token, value: computed.getPropertyValue(prop) };
+    for (const inline of el.style.getPropertyValue(prop).matchAll(/var\(\s*(--[\w-]+)/g)) candidateTokens.push({ token: inline[1], selector: 'style attribute', declaration: el.style.getPropertyValue(prop), important: el.style.getPropertyPriority(prop) === 'important' });
+    return { candidateTokens, value: computed.getPropertyValue(prop) };
   };
   const root = document.querySelector('[data-conformance-root],main,[role=main]') ?? document.body;
   const elements = new Map();
   const classify = (el) => {
-    const role = el.getAttribute('role'); const cls = el.getAttribute('class') ?? '';
+    const role = el.getAttribute('role');
     if (el.matches('button,summary,[role=button]')) return 'button';
     if (el.matches('input,textarea,select')) return 'input';
     if (el.matches('a[href]')) return 'link';
     if (role === 'tab' || role === 'switch') return role;
-    if (/badge/i.test(cls) || el.matches('[data-component=badge]')) return 'badge';
     if (el.matches('svg,img')) return 'icon';
     if (el.matches('h1,h2,h3,h4,h5,h6')) return 'heading';
     if (el.matches('[data-region],[data-component],section,article,fieldset,[role=group]')) return 'region';
@@ -54,8 +52,7 @@ export async function snapshotDOM(options = {}) {
       for (const p of ['color', 'background-color', 'border-top-color']) style[p] = color(el, p, s);
       const textRects = direct.map(node => { const range = document.createRange(); range.selectNodeContents(node); return { text: squash(node.textContent), rect: rect(range.getBoundingClientRect(), own) }; });
       const classes = [...el.classList].sort();
-      const nameTokens = classes.join(' ').match(/--(?:badge|button|input|accordion|switch|tabs?)[\w-]*/g) ?? [];
-      const componentName = el.dataset.component ?? nameTokens[0]?.match(/^--([a-z]+)/)?.[1] ?? null;
+      const componentName = el.dataset.component ?? null;
       const tokens = [...new Set(classes.flatMap(c => c.match(/--[\w-]+/g) ?? []))].sort().map(name => ({ name, value: s.getPropertyValue(name).trim(), definitions: declarations.filter(r => r.style.getPropertyValue(name)).map(r => ({ selector: r.selectorText, value: r.style.getPropertyValue(name).trim() })) }));
       const utilities = classes.filter(c => /^(?:!?[wh]-|min-[wh]-|max-[wh]-|p[xytrbl]?-|m[xytrbl]?-|gap-|rounded-)/.test(c));
       elements.set(key, { id: `E${elements.size + 1}`, locator: key, order: elements.size, kind, tag: el.tagName.toLowerCase(), text: squash(direct.map(x => x.textContent).join(' ')) || (['button', 'link', 'tab', 'switch'].includes(kind) ? squash(el.textContent) : ''), label: el.getAttribute('aria-label') ?? el.getAttribute('alt') ?? '', classes, utilities, tokens, attributes: Object.fromEntries(['placeholder', 'type', 'name', 'role', 'aria-label', 'href'].filter(p => el.hasAttribute(p)).map(p => [p, el.getAttribute(p)])), reference: { locator: locator(reference), kind: classify(reference), label: reference.getAttribute('aria-label') ?? squash(reference.querySelector('h1,h2,h3')?.textContent) }, rect: rect(own, base), textRects, style, componentName, sizeAttribute: el.dataset.size ?? null, variantAttribute: el.dataset.variant ?? null, componentHint: null, view });

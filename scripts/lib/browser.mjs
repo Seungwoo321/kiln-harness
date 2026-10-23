@@ -26,6 +26,7 @@ export async function serve(root) {
     try {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
       const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+      if (pathname.split('/').some(p => p.startsWith('.'))) { res.writeHead(403).end(); return; }
       let file = resolve(root, `.${pathname}`);
       if (!inside(root, file)) { res.writeHead(403).end(); return; }
       if (statSync(file).isDirectory()) file = join(file, 'index.html');
@@ -50,7 +51,7 @@ export async function serveGit(repo, commit) {
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }
       let path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '');
       if (!path || path.endsWith('/')) path += 'index.html';
-      if (path.includes('\0') || path.includes('\\') || path.split('/').some(p => p === '..' || p === '.git')) { res.writeHead(403).end(); return; }
+      if (path.includes('\0') || path.includes('\\') || path.split('/').some(p => p.startsWith('.'))) { res.writeHead(403).end(); return; }
       const body = execFileSync('git', ['-C', repo, 'show', `${commit}:${path}`], { maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
       assets.set(path, sha256(body));
       res.writeHead(200, { 'Content-Type': MIME[extname(path)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(req.method === 'HEAD' ? undefined : body);
@@ -61,7 +62,7 @@ export async function serveGit(repo, commit) {
 }
 
 const delay = (ms) => new Promise((yes) => setTimeout(yes, ms));
-export async function launchBrowser(chrome, scratch = tmpdir()) {
+export async function launchBrowser(chrome, scratch = tmpdir(), cleanup = () => {}) {
   const profile = mkdtempSync(join(scratch, 'chrome-'));
   const child = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--disable-dev-shm-usage', '--lang=en-US', '--force-device-scale-factor=1', '--no-proxy-server', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = ''; let spawnError;
@@ -70,7 +71,9 @@ export async function launchBrowser(chrome, scratch = tmpdir()) {
   let ws; let seq = 0;
   const pending = new Map();
   const rejectAll = (error) => { for (const p of pending.values()) { clearTimeout(p.timer); p.no(new Error(`${p.method}: ${error.message}`)); } pending.clear(); };
-  const close = async () => {
+  let closing;
+  const close = () => closing ??= (async () => {
+    process.removeListener('SIGTERM', terminated); process.removeListener('SIGINT', interrupted); process.removeListener('exit', exited);
     ws?.close(); rejectAll(new Error('Chrome 종료'));
     if (child.exitCode === null && child.signalCode === null && !spawnError) {
       const stopped = new Promise(yes => child.once('exit', yes));
@@ -79,7 +82,11 @@ export async function launchBrowser(chrome, scratch = tmpdir()) {
       if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await stopped; }
     }
     rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-  };
+  })();
+  const exited = () => { child.kill('SIGKILL'); rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); cleanup(); };
+  const stop = async (code) => { try { await close(); } finally { cleanup(); process.exit(code); } };
+  const terminated = () => { void stop(143); }; const interrupted = () => { void stop(130); };
+  process.once('SIGTERM', terminated); process.once('SIGINT', interrupted); process.once('exit', exited);
   try {
     const portFile = join(profile, 'DevToolsActivePort');
     for (let n = 0; !existsSync(portFile); n++) {
@@ -88,8 +95,9 @@ export async function launchBrowser(chrome, scratch = tmpdir()) {
     }
     const port = readFileSync(portFile, 'utf8').split('\n')[0];
     const base = `http://127.0.0.1:${port}`;
-    const targets = await (await fetch(`${base}/json/list`)).json();
+    const targets = await (await fetch(`${base}/json/list`, { signal: AbortSignal.timeout(10000) })).json();
     const target = targets.find((x) => x.type === 'page');
+    if (!target?.webSocketDebuggerUrl) throw new Error('Chrome CDP page target가 없음');
     ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((yes, no) => { ws.addEventListener('open', yes, { once: true }); ws.addEventListener('error', no, { once: true }); });
     const events = new Map();
@@ -122,7 +130,12 @@ export async function navigate(browser, url, { theme = null, width = 1440, heigh
   if (!/^https?:\/\//.test(url)) throw new Error('렌더 URL은 http 또는 https여야 함');
   await browser.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   await browser.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme ?? 'light' }, { name: 'prefers-reduced-motion', value: 'reduce' }] });
-  const assets = new Map(); const failures = [];
+  const assets = new Map(); const failures = []; const requests = new Map();
+  const offRequest = browser.on('Network.requestWillBeSent', ({ requestId, request }) => requests.set(requestId, request.url));
+  const offFailed = browser.on('Network.loadingFailed', ({ requestId, canceled, errorText }) => {
+    const failedUrl = requests.get(requestId) ?? requestId;
+    if (!canceled && !failedUrl.endsWith('/favicon.ico')) failures.push(`${errorText} ${failedUrl}`);
+  });
   const off = browser.on('Network.responseReceived', ({ requestId, response, type }) => {
     if (response.url.endsWith('/favicon.ico')) return;
     if (response.status >= 400) failures.push(`${response.status} ${response.url}`);
@@ -159,5 +172,5 @@ export async function navigate(browser, url, { theme = null, width = 1440, heigh
       return { path, digest: hash.digest('hex') };
     }));
     return { viewport: { width, height }, scale: 1, locale: 'en-US', theme, browser: browser.version, contentReady, assets: resources.sort((a, b) => a.path.localeCompare(b.path)) };
-  } finally { off(); }
+  } finally { off(); offRequest(); offFailed(); }
 }

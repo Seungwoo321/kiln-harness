@@ -7,11 +7,11 @@
 <input_contract>
 - `conformance-facts.json`: designs·implementation의 DOM 사실, baseline, code, facts.
 - 이전 판정과 실행 로그는 읽지 않는다. 현재 facts와 그 근거만 읽는다.
-- element-observation은 정확히 같은 텍스트·종류의 대응 후보다. 후보가 없거나 여러 개면 직접 원문을 대조한다. DOM 경로나 문구가 달라도 의미가 대응할 수 있다.
+- element-observation은 같은 텍스트 등의 대응 후보다. 종류가 달라도 후보를 남긴다. 후보가 없거나 여러 개면 직접 원문을 대조한다. DOM 경로나 문구가 달라도 의미가 대응할 수 있다.
 - interaction-observation은 실제 클릭 전후 상태다. unknown을 임의로 single/multi로 채우지 않는다.
-- token-undefined는 시안 토큰이 구현 CSS에 선언되지 않았다는 사실이다. 시안 선언값과 기존 코드 사용례를 확인한다.
-- px-classes-present는 JSX의 임의 크기 클래스 존재 사실이다. 이 클래스가 DS 규칙을 덮어쓰는지 직접 판단한다.
-- baseline의 클래스·data-size·계산 스타일을 함께 읽는다. px만으로 size를 정하지 않는다. 배지 h-7과 w-(--badge-status-w-sm)의 너비 토큰을 구분한다. 너비 토큰의 sm을 size로 해석하지 않는다.
+- token-undefined는 searched 검색 범위 안에서 선언을 찾지 못한 사실이다. 시안 선언값과 기존 코드 사용례를 확인한다. 검색 밖 패키지·다른 형식의 정의가 있으면 token-missing으로 단정하지 않는다. 확인에 필요한 자료가 없으면 missingInputs로 알린다.
+- jsx-classname은 JSX 컴포넌트의 className 원문 전체와 정적 문자열의 클래스 토큰이다. 동적 표현식은 평가되지 않았다. 이 클래스가 DS 규칙을 덮어쓰는지 직접 판단한다.
+- baseline의 클래스·data-size·계산 스타일을 함께 읽는다. 높이·크기 유틸리티와 너비 토큰을 구분한다. 토큰 이름의 접미사나 측정 px로 size를 정하지 않는다. 색의 candidateTokens는 매칭 선언 후보이며 최종 적용 토큰이 아니다.
 - 등록된 코드 원본은 커밋으로 읽는다. 현재 구현의 사실은 수집 시점의 snapshot과 code 자료다. 필요한 근거가 없으면 missingInputs로 알린다.
 </input_contract>
 
@@ -24,18 +24,19 @@
   "rows": [{
     "id": "C-001",
     "factIds": ["F-design-E1"],
+    "observations": [{"fact":"F-design-E1","implementation":"E2"}],
     "verdict": "match|acceptable|gap|ds-override|token-missing|needs-component|behavior-mismatch",
     "reason": "의미 대응과 판정 이유",
-    "evidence": ["실재 fact id 또는 baseline id 또는 code path:line"],
-    "expected": "시안 사실",
-    "actual": "구현 사실",
-    "componentHint": {"component":"badge","size":"md","variant":"success","shape":"rounded-md","classes":["h-7","rounded-md"]},
+    "evidence": ["실재 fact id 또는 구현 요소 id 또는 baseline id 또는 code path:line"],
+    "componentHint": null,
     "question": {"to":"design","question":"동작 차이에 대한 확인 내용"}
   }]
 }
 ```
 
 모든 fact id를 정확히 한 번 다룬다. 같은 의미로 묶이는 사실은 한 행의 factIds에 모은다. 확인한 근거 없는 결론은 쓰지 않는다.
+
+observations에는 factIds마다 정확히 한 쌍을 쓴다. implementation은 해당 사실의 candidates에 있는 구현 id다. 대응 후보를 선택하지 않으면 null이다. 코드 사실도 null을 쓴다. expected/actual은 쓰지 않는다. 스크립트가 선택된 후보의 comparisons에서 복사한다. 이유는 차이와 근거를 설명하며 수치를 인용할 때는 해당 쌍의 사실을 확인한다. componentHint를 쓰면 component·size·variant·shape와 근거 클래스 classes를 함께 쓴다.
 
 | 판정 | 판단 기준 |
 |---|---|

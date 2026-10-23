@@ -115,7 +115,7 @@ changeKind 와 covers 의 정합(결정적 검사)
 | `requirements[].sourcePolicy` | `{classification, reason, evidence:[{sourceId,locator}]}` |
 | `planObservations[]` | `{classification, reason, sourceRefs, evidence?, question?}`. 채택하지 않는 관찰도 이유와 함께 기록한다 |
 
-측정된 구조·텍스트 순서·위치·크기·스타일·클릭 상태는 `design-spec/<sourceId>.json`의 해당 id를 근거로 삼는다. 측정 px는 목표값이 아니라 증거다. LLM이 시안 규격 행의 `componentHint:{component,size,variant,shape,classes}`를 판단한다. 사실 수집 단계는 hint를 null로 남긴다. `h-7`과 `w-(--badge-status-w-sm)`은 각각 높이 유틸리티와 너비 토큰이다. 너비 토큰의 접미사나 측정 px로 size를 결정하지 않는다. component-rule·htmlLimit은 실재하는 baseline id와 이유를 단다.
+측정된 구조·텍스트 순서·위치·크기·스타일·클릭 상태는 `design-spec/<sourceId>.json`의 해당 id를 근거로 삼는다. 측정 px는 목표값이 아니라 증거다. LLM이 시안 규격 행의 `componentHint:{component,size,variant,shape,classes}`를 판단한다. 사실 수집 단계는 hint를 null로 남긴다. 높이·크기 유틸리티와 너비 토큰을 구분한다. 토큰 이름의 접미사나 측정 px로 size를 정하지 않는다. component-rule·htmlLimit은 실재하는 baseline id와 이유를 단다.
 
 | 출처·분류 | 계획서 반영 |
 |---|---|

@@ -25,16 +25,14 @@ export function safeId(id) { if (!/^[\w.-]+$/.test(id) || id === '.' || id === '
 
 export function existingPatterns(dir, registry) {
   const candidates = [];
-  const terms = ['Accordion', 'Tabs', 'Switch', 'Badge', 'Button', 'Input', 'Dialog', 'Select', 'Checkbox'];
   for (const s of registry.sources.filter(s => s.role === 'implementation' && s.kind === 'code')) {
     let output;
-    try { output = execFileSync('git', ['-C', s.repo, 'grep', '-n', '-I', '-E', terms.join('|'), s.commit, '--', ...s.paths], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); }
+    try { output = execFileSync('git', ['-C', s.repo, 'grep', '-n', '-I', '-E', '<[A-Z][[:alnum:]_.]*|className[[:space:]]*=', s.commit, '--', ...s.paths], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }); }
     catch (e) { if (e.status === 1) continue; throw e; }
     for (const line of output.trim().split('\n').filter(Boolean)) {
       const m = line.slice(s.commit.length + 1).match(/^(.+?):(\d+):(.*)$/);
       if (!m || !/\.[jt]sx?$/.test(m[1])) continue;
-      const term = terms.find(t => new RegExp(`\\b${t}\\b`).test(m[3]));
-      if (!term) continue;
+      const term = m[3].match(/<[A-Z][\w.]*|className\s*=/)?.[0];
       candidates.push({ sourceId: s.id, locator: `${m[1]}:${m[2]}`, term, snippet: m[3].trim().slice(0, 300) });
     }
   }
@@ -52,14 +50,13 @@ export async function capturePage(browser, url, options = {}) {
 }
 
 export function componentCandidates(elements, baseline) {
-  return elements.map(e => ({ ...e, componentHint: null, componentCandidates: baseline.samples.filter(b => b.tag === e.tag && b.componentLabel === (e.componentName ?? e.kind)).map(b => ({ baseline: b.id, sharedClasses: e.classes.filter(c => b.classes.includes(c)) })) }));
+  return elements.map(e => ({ ...e, componentHint: null, componentCandidates: baseline.samples.filter(b => b.tag === e.tag).map(b => { const sharedClasses = e.classes.filter(c => b.classes.includes(c)); return { baseline: b.id, tag: b.tag, sharedClasses, sharedClassCount: sharedClasses.length }; }) }));
 }
 
 function samplesFor(page, sourceId, file, dom) {
   const samples = [];
   for (const e of dom.elements) {
-    if (!['button', 'input', 'badge', 'switch', 'tab'].includes(e.kind) && !e.componentName) continue;
-    if (samples.some(b => canonical(b.classes) === canonical(e.classes) && canonical(b.style) === canonical(e.style))) continue;
+    if (samples.some(b => b.tag === e.tag && canonical(b.classes) === canonical(e.classes) && canonical(b.style) === canonical(e.style))) continue;
     samples.push({ id: `B-${sourceId}-${sha256(`${file}|${e.locator}`).slice(0, 12)}`, sourceId, file, locator: e.locator, componentLabel: page, sizeAttribute: e.sizeAttribute, variantAttribute: e.variantAttribute, text: e.text, classes: e.classes, utilities: e.utilities, tokens: e.tokens, tag: e.tag, rect: e.rect, style: e.style });
   }
   return samples;
@@ -72,23 +69,20 @@ export async function designSpec(dir, options = {}) {
   for (const s of designs) safeId(s.id);
   existingPatterns(dir, registry);
   const out = join(dir, 'design-spec'); mkdirSync(out, { recursive: true });
-  // 제거된 원본의 스냅샷은 남겨 재사용하지 않는다.
-  for (const f of readdirSync(out)) if (f.endsWith('.json') && !designs.some(s => `${s.id}.json` === f)) rmSync(join(out, f));
   const chrome = findChrome(options.env ?? process.env);
   const skip = !designs.length ? 'design-html 없음' : !chrome ? 'chrome 없음' : null;
   if (skip) {
-    for (const f of readdirSync(out)) rmSync(join(out, f), { force: true });
-    rmSync(join(dir, 'component-baseline.json'), { force: true });
     const status = seal({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'skipped', reason: skip, sources: [] });
     writeJson(join(dir, 'design-spec-status.json'), status);
     return status;
   }
+  for (const f of readdirSync(out)) if (f.endsWith('.json') && !designs.some(s => `${s.id}.json` === f)) rmSync(join(out, f));
   const scratchRoot = join(dir, '.render'); mkdirSync(scratchRoot, { recursive: true });
   const scratch = mkdtempSync(join(scratchRoot, 'capture-'));
   let browser;
   const servers = [];
   try {
-    browser = await launchBrowser(chrome, scratch);
+    browser = await launchBrowser(chrome, scratch, () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot); });
     const roots = new Map();
     for (const s of registry.sources.filter(s => s.role === 'design' && s.kind === 'code')) {
       roots.set(s.id, { repo: s.repo, commit: s.commit, paths: s.paths, inputDigest: sha256(canonical({ commit: s.commit, tree: s.sha256 })) });
@@ -134,7 +128,7 @@ export async function designSpec(dir, options = {}) {
     writeJson(join(dir, 'design-spec-status.json'), status);
     return status;
   } catch (e) {
-    writeJson(join(dir, 'design-spec-status.json'), { schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: e.message, sources: [] });
+    writeJson(join(dir, 'design-spec-status.json'), seal({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: e.message, sources: [] }));
     throw e;
   } finally {
     for (const s of servers) await s.close();

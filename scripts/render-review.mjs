@@ -120,7 +120,7 @@ export function renderReview(caseDir) {
   const conformancePath = join(caseDir, 'conformance.json');
   if (existsSync(conformancePath)) {
     const report = JSON.parse(readFileSync(conformancePath, 'utf8'));
-    if (!p.designSpecDigests || canonical(report.inputDigests) === canonical(p.designSpecDigests)) parts.push(conformanceSection(report));
+    if (!p.designSpecDigests || report.inputDigests?.every(d => p.designSpecDigests.includes(d))) parts.push(conformanceSection(report));
   }
 
   const nav = [['kinds', '변경 유형'], ...(v2 ? [['findings', '지적']] : []), ...(p.lineage ? [['lineage', '계보']] : []), ['questions', '전달'], ...(v2 ? [['decisions', '결정 기록']] : []), ['scope', '범위'], ['requirements', '요구사항'], ['states', '상태'], ['components', '컴포넌트'], ['api', 'API'], ['i18n', '다국어'], ['gaps', '차이']]

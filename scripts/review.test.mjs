@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validate } from './validate.mjs';
@@ -73,4 +73,13 @@ test('검토 HTML 은 결정적이고, id 앵커가 있고, 입력을 이스케�
   assert.ok(a.includes('id="R1"') && a.includes('id="F1"'));
   assert.ok(!a.includes('<script>alert(1)</script>'));
   assert.ok(a.includes('&lt;script&gt;') && a.includes('디자이너 확인'));
+});
+
+test('한 시안의 적합성 결과는 전체 시안 목록의 부분집합이면 표시한다', t => {
+  const dir = fixture(p => { p.designSpecDigests = ['design-a', 'design-b']; });
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const [digest, expected] of [['design-a', true], ['stale-design', false]]) {
+    writeFileSync(join(dir, 'conformance.json'), JSON.stringify({ inputDigests: [digest], rows: [], status: 'passed' }));
+    assert.equal(renderReview(dir).includes('id="sec-conformance"'), expected);
+  }
 });

@@ -6,7 +6,6 @@ export function readDesignSpecs(dir, registry) {
   const statusFile = join(dir, 'design-spec-status.json');
   if (existsSync(statusFile)) {
     const status = JSON.parse(readFileSync(statusFile, 'utf8'));
-    if (status.status === 'skipped') return [];
     if (status.status === 'failed') throw new Error(`design-spec 실패: ${status.reason}`);
   }
   return registry.sources.filter(s => s.kind === 'design-html' && s.role === 'design').flatMap(s => {

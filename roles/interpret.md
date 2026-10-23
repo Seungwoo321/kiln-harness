@@ -43,7 +43,7 @@
 - plan UI 요구사항에는 category:ui, sourcePolicy:{classification,reason,evidence:[{sourceId,locator}]}를 단다. 기존 패턴 후보는 existing-patterns.json에서 찾고 실제 코드로 확인한다. 후보가 없으면 지어내지 않는다.
 - 시안 동작 > 기획 HTML > 기획 문서다. 정책·규칙은 기획 문서가 정본이다. designSpecs에는 범위 안 시안의 관찰과 모든 상호작용 id를 요구사항에 연결하고 verdict:strict|component-rule|htmlLimit과 이유를 쓴다. interaction.openPolicy를 명시한다.
 - 컴포넌트 판단 순서는 올바른 size/variant/prop → 기존 조합 → 반복 UI의 신규 컴포넌트 후보 판단이다. className으로 임의 px를 덮어쓰는 것은 새 갭이다. 기준 렌더와 일치하는 차이는 수용한다.
-- componentHint의 근거는 클래스다. 배지 h-7의 md 높이와 w-(--badge-status-w-sm)의 너비 토큰을 구분한다. 너비 토큰의 sm이나 측정 px로 size를 정하지 않는다. 구현 CSS에 없는 시안 토큰은 DS 토큰 누락 후보로 기록한다.
+- componentHint의 근거는 클래스다. 높이·크기 유틸리티와 너비 토큰을 구분한다. 토큰 이름의 접미사나 측정 px로 size를 정하지 않는다. 구현 CSS의 검색 범위에서 선언을 찾지 못한 시안 토큰은 누락 후보로 기록한다.
 - 동작 충돌은 다음 시도에서 고친다. 해소되지 않으면 to:design confirm 질문에 designEvidence:{sourceId,interaction}를 단다. 연결 requirement는 resolution:pending, designSpecs 행은 question id를 단다. 질문의 의미와 내용은 직접 작성한다. 스크립트가 대신 생성하지 않는다.
 - 시안의 componentHint·htmlLimit·기존 패턴 적합성·프로토타입 분류는 직접 판단한다. design-spec의 후보는 사실 탐색 결과다. 후보를 자동 정답으로 취급하지 않는다. component-rule·htmlLimit 행은 baseline id를 단다.
 - operationId·파일 경로·컴포넌트 이름을 지어내지 않는다. extract 앵커에 있는 값만 쓴다(새 파일은 `fileStatus:"new"` 와 이유).

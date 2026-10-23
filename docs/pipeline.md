@@ -44,7 +44,6 @@ S2d는 로컬 Chrome과 Node 내장 WebSocket을 사용한다. 파일은 상대 
 
 S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code`의 JSX에서 임의 크기 클래스 존재와 CSS 토큰 선언 여부를 수집한다. 기존 className 토큰 사용례를 후보로 제공한다. 수치 차이와 오차 안팎은 사실이다. 의미 대응과 acceptable·gap 등 판정은 별도 LLM 세션이 맡는다. `run.mjs --conformance`는 수집된 사실에 대한 판정만 재실행한다. gap·ds-override·token-missing·behavior-mismatch 판정은 종료 코드 1이다. needs-component는 경고다. 판단을 완료하지 못하면 3이다.
 
-범위·해석·비평·적합성 역할은 [문서와 명세 작성 지침](writing.md)을 공통 입력으로 받는다. 스크립트는 문장 품질을 자동 판정하지 않는다.
 
 ## 실행 구조
 

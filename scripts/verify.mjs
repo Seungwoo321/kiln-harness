@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // S8 — 라이브 구현과 등록된 시안의 요소·동작·코드를 대조한다.
-import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, statSync, mkdirSync, mkdtempSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { findChrome, launchBrowser } from './lib/browser.mjs';
@@ -28,6 +28,7 @@ export function parseArgs(argv) {
 
 export async function verify(rawDir, options, injected = {}) {
   const dir = resolve(rawDir); const registry = readJson(join(dir, 'sources.json'));
+  if (!options.code || !existsSync(options.code) || !statSync(options.code).isDirectory()) throw new Error('--code에 실재하는 기능 폴더가 필요함');
   if (options.theme && !['dark', 'light'].includes(options.theme)) throw new Error('--theme은 dark|light');
   const registered = registry.sources.filter(s => s.kind === 'design-html' && s.role === 'design');
   if (options.source && !registered.some(s => s.id === options.source)) throw new Error(`등록된 디자인 원본이 아님: ${options.source}`);
@@ -40,12 +41,11 @@ export async function verify(rawDir, options, injected = {}) {
     writeJson(join(dir, 'conformance.json'), report);
     writeFileSync(join(dir, 'conformance-brief.md'), conformanceBrief(report));
     appendConformanceReview(dir, report);
-    return { report, exitCode: report.status === 'failed' ? 1 : report.status === 'needs-judgment' ? 3 : report.status === 'error' ? 2 : 0 };
+    return { report, exitCode: report.status === 'failed' ? 1 : ['needs-judgment', 'skipped'].includes(report.status) ? 3 : report.status === 'error' ? 2 : 0 };
   };
   if (!specs.length) return finish({ status: 'skipped', reason: 'design-spec 없음 또는 skipped' });
   const chrome = findChrome(options.env ?? process.env);
   if (!chrome) return finish({ status: 'skipped', reason: 'chrome 없음' });
-  if (!options.code || !existsSync(options.code)) throw new Error('--code에 실재하는 기능 폴더가 필요함');
   const baseline = readJson(join(dir, 'component-baseline.json'));
   if (specs.some(s => s.baselineDigest !== baseline.digest)) throw new Error('시안과 컴포넌트 기준 digest가 다름. S2d를 다시 실행한다');
   const defaultConfig = readJson(new URL('../kh.config.json', import.meta.url));
@@ -55,10 +55,10 @@ export async function verify(rawDir, options, injected = {}) {
   const scratch = mkdtempSync(join(scratchRoot, 'verify-'));
   let browser;
   try {
-    browser = await launchBrowser(chrome, scratch);
+    browser = await launchBrowser(chrome, scratch, () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot); });
     const dom = await capturePage(browser, options.url, { theme: options.theme ?? specs[0].render.theme, ...specs[0].render.viewport });
     const implementation = seal({ schemaVersion: 1, kind: 'ImplementationSpec', render: dom.render, elements: componentCandidates(dom.elements, baseline), interactions: dom.interactions });
-    const inspected = inspectCode(options.code, specs, baseline);
+    const inspected = inspectCode(options.code, specs);
     const facts = seal({ schemaVersion: 1, kind: 'ConformanceFacts', inputDigests: specs.map(s => s.digest), tolerances, designs: specs, implementation, baseline,
       code: { digest: inspected.codeDigest, files: inspected.files, tokenDefinitions: inspected.definitions, existingPatterns: inspected.existingPatterns },
       facts: specs.flatMap(s => compareFacts(s, implementation, tolerances)).concat(inspected.facts) });
