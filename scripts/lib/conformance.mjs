@@ -76,9 +76,9 @@ export function inspectCode(codeDir, specs) {
   } catch { files = walk(root); }
   const definitions = new Map(); const candidates = []; const overrides = []; const digests = [];
   const searched = { root, extensions: ['.css'], excluded: listing === 'filesystem' ? [...EXCLUDED, 'symbolic-links'] : ['git-ignored files unless tracked', 'untracked package files'], listing };
-  for (const file of files.filter(p => /\.(?:css|[jt]sx)$/.test(p)).sort()) {
+  for (const file of files.filter(p => /\.(?:css|[jt]sx?)$/.test(p)).sort()) {
     const text = readFileSync(file, 'utf8'); const path = relative(root, file).split('\\').join('/');
-    digests.push({ file: path, digest: sha256(text) });
+    digests.push({ file: path, digest: sha256(text), lines: text.split('\n').length });
     if (/\.css$/.test(file)) {
       const clean = text.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '));
       for (const m of clean.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)/g)) {
@@ -103,7 +103,7 @@ export function inspectCode(codeDir, specs) {
     missing.push({ kind: 'token-undefined', sourceId: spec.sourceId, designDigest: spec.digest, element: e.id, property: token.name, expected: { token: token.name, value: token.value, definitions: token.definitions, classes: e.classes.filter(c => c.includes(token.name)) }, actual: null, searched, evidence: `${spec.sourceId}:${e.id}`, componentHint: null, observation: '검색 범위 안에서 선언을 찾지 못함', candidates: candidates.map(({ component, file, line }) => ({ component, file, line })) });
   }
   for (const o of overrides) o.candidates = candidates.filter(c => c.component === o.component && `${c.file}:${c.line}` !== o.evidence).map(({ component, file, line }) => ({ component, file, line }));
-  return { facts: [...overrides, ...missing].map((f, i) => ({ id: `F-CODE-${i + 1}`, ...f })), definitions: Object.fromEntries([...definitions].sort()), existingPatterns: candidates, codeDigest: sha256(canonical(digests)), files: digests.length };
+  return { facts: [...overrides, ...missing].map((f, i) => ({ id: `F-CODE-${i + 1}`, ...f })), definitions: Object.fromEntries([...definitions].sort()), existingPatterns: candidates, sourceFiles: digests, codeDigest: sha256(canonical(digests)), files: digests.length };
 }
 
 export const VERDICTS = ['match', 'acceptable', 'gap', 'ds-override', 'token-missing', 'needs-component', 'behavior-mismatch'];
@@ -114,6 +114,10 @@ export function judgmentErrors(draft, facts) {
   const known = new Set(facts.facts.map(f => f.id));
   const covered = new Set(); const ids = new Set();
   const evidenceIds = new Set([...known, ...facts.implementation.elements.map(e => e.id), ...facts.implementation.interactions.map(e => e.id), ...facts.baseline.samples.map(b => b.id), ...facts.code.existingPatterns.map(c => `${c.file}:${c.line}`), ...Object.values(facts.code.tokenDefinitions).flat().map(c => `${c.file}:${c.line}`)]);
+  const codeEvidence = id => {
+    const m = typeof id === 'string' && id.match(/^(.+):([1-9]\d*)$/);
+    return Boolean(m && (facts.code.sourceFiles ?? []).some(f => f.file === m[1] && Number(m[2]) <= f.lines));
+  };
   for (const r of draft.rows) {
     if (!r || typeof r !== 'object') { errors.push('판정 행은 객체여야 함'); continue; }
     const factIds = Array.isArray(r.factIds) ? r.factIds : [];
@@ -132,8 +136,8 @@ export function judgmentErrors(draft, facts) {
       selected.add(pair.fact);
       if (pair.implementation !== null && (typeof pair.implementation !== 'string' || !fact?.candidates?.some(c => c.implementation === pair.implementation))) errors.push(`${r.id}: 해당 사실의 구현 후보 id 또는 null이 필요함`);
     }
-    if (!Array.isArray(r.evidence) || !r.evidence.length || r.evidence.some(id => !evidenceIds.has(id))) errors.push(`${r.id}: 실재하는 근거 id가 필요함`);
-    if (r.verdict === 'acceptable' && !evidence.some(id => facts.baseline.samples.some(b => b.id === id) || facts.code.existingPatterns.some(c => `${c.file}:${c.line}` === id))) errors.push(`${r.id}: acceptable은 컴포넌트 기준 또는 코드 사용례 근거가 필요함`);
+    if (!Array.isArray(r.evidence) || !r.evidence.length || r.evidence.some(id => !evidenceIds.has(id) && !codeEvidence(id))) errors.push(`${r.id}: 실재하는 근거 id 또는 수집된 코드 파일의 path:line이 필요함`);
+    if (r.verdict === 'acceptable' && !evidence.some(id => facts.baseline.samples.some(b => b.id === id) || facts.code.existingPatterns.some(c => `${c.file}:${c.line}` === id) || codeEvidence(id))) errors.push(`${r.id}: acceptable은 컴포넌트 기준 또는 코드 사용례 근거가 필요함`);
     if (r.componentHint) {
       const classes = new Set(facts.designs.flatMap(d => d.elements.filter(e => factIds.includes(`F-${d.sourceId}-${e.id}`)).flatMap(e => e.classes)).concat(facts.baseline.samples.filter(b => evidence.includes(b.id)).flatMap(b => b.classes)));
       if (!Array.isArray(r.componentHint.classes) || !r.componentHint.classes.length || r.componentHint.classes.some(c => !classes.has(c))) errors.push(`${r.id}: componentHint에는 실재하는 근거 클래스가 필요함`);

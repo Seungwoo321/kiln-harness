@@ -13,6 +13,7 @@
 - jsx-classname은 JSX 컴포넌트의 className 원문 전체와 정적 문자열의 클래스 토큰이다. 동적 표현식은 평가되지 않았다. 이 클래스가 DS 규칙을 덮어쓰는지 직접 판단한다.
 - baseline의 클래스·data-size·계산 스타일을 함께 읽는다. 높이·크기 유틸리티와 너비 토큰을 구분한다. 토큰 이름의 접미사나 측정 px로 size를 정하지 않는다. 색의 candidateTokens는 매칭 선언 후보이며 최종 적용 토큰이 아니다.
 - 등록된 코드 원본은 커밋으로 읽는다. 현재 구현의 사실은 수집 시점의 snapshot과 code 자료다. 필요한 근거가 없으면 missingInputs로 알린다.
+- 코드 인용은 code.sourceFiles에 기록된 파일의 행 수 범위 안에서 정확한 path:line으로 쓴다. 없는 파일·범위 밖 행·행 범위 표기는 허용하지 않는다. 기준 렌더는 baseline id, 시안은 fact id, 구현은 요소 id로 인용한다.
 </input_contract>
 
 <output_contract>
@@ -37,6 +38,8 @@
 모든 fact id를 정확히 한 번 다룬다. 같은 의미로 묶이는 사실은 한 행의 factIds에 모은다. 확인한 근거 없는 결론은 쓰지 않는다.
 
 observations에는 factIds마다 정확히 한 쌍을 쓴다. implementation은 해당 사실의 candidates에 있는 구현 id다. 대응 후보를 선택하지 않으면 null이다. 코드 사실도 null을 쓴다. expected/actual은 쓰지 않는다. 스크립트가 선택된 후보의 comparisons에서 복사한다. 이유는 차이와 근거를 설명하며 수치를 인용할 때는 해당 쌍의 사실을 확인한다. componentHint를 쓰면 component·size·variant·shape와 근거 클래스 classes를 함께 쓴다.
+
+componentHint.classes는 이 행의 factIds에 연결된 시안 요소의 classes 또는 evidence에 인용한 baseline의 classes에서 가져온다. 그 밖의 구현 클래스나 임의로 조합한 클래스는 hint 근거로 쓰지 않는다. 매핑 근거가 부족하면 componentHint를 null로 둔다.
 
 | 판정 | 판단 기준 |
 |---|---|

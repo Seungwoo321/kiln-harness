@@ -61,7 +61,7 @@ export async function verify(rawDir, options, injected = {}) {
     const implementation = seal({ schemaVersion: 1, kind: 'ImplementationSpec', render: dom.render, elements: componentCandidates(dom.elements, baseline), interactions: dom.interactions });
     const inspected = inspectCode(options.code, specs);
     const facts = seal({ schemaVersion: 1, kind: 'ConformanceFacts', inputDigests: specs.map(s => s.digest), tolerances, designs: specs, implementation, baseline,
-      code: { digest: inspected.codeDigest, files: inspected.files, tokenDefinitions: inspected.definitions, existingPatterns: inspected.existingPatterns },
+      code: { digest: inspected.codeDigest, files: inspected.files, sourceFiles: inspected.sourceFiles, tokenDefinitions: inspected.definitions, existingPatterns: inspected.existingPatterns },
       facts: specs.flatMap(s => compareFacts(s, implementation, tolerances)).concat(inspected.facts) });
     writeJson(join(dir, 'conformance-facts.json'), facts);
     // 판단을 시작하기 전에 브라우저를 종료한다.

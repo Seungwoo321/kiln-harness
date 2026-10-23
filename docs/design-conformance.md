@@ -69,6 +69,8 @@ S5는 출처 분류의 존재와 실재 근거를 검사한다. 분류의 적합
 6. 형식 게이트는 모든 사실에 판정과 실재 근거가 있는지 검사한다. 위반은 다음 시도에 주입한다.
 7. 검증된 판정을 conformance.json·review.html·conformance-brief.md로 렌더한다.
 
+code.sourceFiles는 수집한 JS·TS·JSX·TSX·CSS 파일의 경로·digest·행 수를 가진다. 코드 인용은 이 파일의 범위 안에 있는 path:line을 쓴다. 특정 JSX 시작 줄 외에도 컴포넌트 규칙과 레이아웃 선언 줄을 인용할 수 있다. 게이트는 위치의 실재만 검사하며 인용 내용의 적합성은 LLM이 판단한다.
+
 위치·크기 ±1px, 간격 ±2px는 기본 비교 정보다. size 오차는 너비·높이와 간격 이외의 수치 스타일(font-size·line-height·border-radius 등)에 적용한다. kh.config.json에서 바꾼다. 오차 안팎을 사실로 제공하며 그 값으로 의미상 수용을 확정하지 않는다.
 
 | LLM 판정 | 뜻 |

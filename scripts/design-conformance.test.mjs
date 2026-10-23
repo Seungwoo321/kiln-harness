@@ -172,6 +172,7 @@ test('토큰 선언·주석·JSX 다중 행·동적 className을 정적으로 �
   assert.deepEqual(classes, ['w-[64px]', 'h-8', 'text-[13px]', 'min-w-20']);
   assert.equal(result.facts.find(r => r.kind === 'token-undefined').searched.root, code);
   assert.ok(result.definitions['--present']); assert.ok(!result.definitions['--missing']);
+  assert.ok(result.sourceFiles.some(f => f.file === 'feature.tsx' && f.lines === 3 && /^[a-f\d]{64}$/.test(f.digest)));
 });
 
 test('허용 오차는 사실이며 수용 판정을 자동 생성하지 않는다', () => {
@@ -193,7 +194,7 @@ test('판정 게이트는 후보 쌍을 검증하고 거짓 수치를 사실로 
   const e = { id: 'E1', text: 'X', classes: [], kind: 'text', tag: 'span', rect: { x: 0, y: 0, width: 64, height: 28 }, style: {} };
   const design = { sourceId: 'd', elements: [e], interactions: [] };
   const implementation = { elements: [{ ...e, id: 'E19', rect: { ...e.rect, width: 65.39 } }], interactions: [] };
-  const facts = { digest: 'f', facts: compareFacts(design, implementation), designs: [design], implementation, baseline: { samples: [] }, code: { existingPatterns: [], tokenDefinitions: {} } };
+  const facts = { digest: 'f', facts: compareFacts(design, implementation), designs: [design], implementation, baseline: { samples: [] }, code: { existingPatterns: [], tokenDefinitions: {}, sourceFiles: [{ file: 'component.ts', lines: 10 }] } };
   const row = { id: 'C1', factIds: [facts.facts[0].id], observations: [{ fact: facts.facts[0].id, implementation: 'E19' }], verdict: 'match', reason: '의미 대응 판단', evidence: ['E19'], expected: 64, actual: 64 };
   const draft = { factsDigest: 'f', rows: [row] };
   put(join(dir, 'stages/conformance.json'), draft);
@@ -206,6 +207,8 @@ test('판정 게이트는 후보 쌍을 검증하고 거짓 수치를 사실로 
   assert.ok(judgmentErrors({ ...draft, rows: [{ ...row, observations: [] }] }, facts).length);
   assert.ok(judgmentErrors({ ...draft, rows: [{ ...row, observations: [{ fact: row.factIds[0] }] }] }, facts).length);
   assert.ok(judgmentErrors({ ...draft, rows: [{ ...row, observations: [null] }] }, facts).length);
+  assert.deepEqual(judgmentErrors({ ...draft, rows: [{ ...row, verdict: 'acceptable', evidence: ['component.ts:10'] }] }, facts), []);
+  for (const ref of ['component.ts:11', 'component.ts:0', 'missing.ts:1']) assert.ok(judgmentErrors({ ...draft, rows: [{ ...row, evidence: [ref] }] }, facts).length);
 });
 
 test('응답 없는 네트워크 실패를 기록하고 취소는 제외한다', async () => {
