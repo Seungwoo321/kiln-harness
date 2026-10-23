@@ -7,7 +7,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 
 | 필드 | 뜻 |
 |---|---|
-| `schemaVersion` | `1` |
+| `schemaVersion` | 새 계획서는 `3`. 기존 `1`·`2`도 검증한다 |
 | `kind` | `WorkPlan` |
 | `caseId` | `sources.json` 의 caseId |
 | `inputDigests` | `sources.json` 각 원본의 sha256 전부. 원본이 바뀌면 검증에서 막힌다 |
@@ -49,7 +49,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 
 ## v2 — 변경 유형 · 지적 · 사용자 결정
 
-`schemaVersion: 2` 일 때만 적용된다(v1 은 그대로 검증된다).
+`schemaVersion` 2 이상에 적용된다(v1은 그대로 검증된다).
 
 | 절 | 필드 |
 |---|---|
@@ -101,6 +101,35 @@ changeKind 와 covers 의 정합(결정적 검사)
 **검토 수준(`level`, 0~10, 기본 5)** 은 계획서 최상위에 기록된다. 0~3 이면 모든 질문에 `blocking:true` · `blockedReason` · `triedFits:[{option, whyNot}]`(0 은 3개 이상, 1~3 은 2개 이상)가 필요하다. 7 이상이면 모든 요구사항·상태가 task 의 `covers` 에 들어가야 하고, 8 이상이면 비평 결과에 화면별 `coverage:[{surface, sourcesCompared[], result, note?}]`(기획·디자인·계약 원본을 모두 대조)가 있어야 하며, 9 이상이면 요구사항마다 `acceptance` 가 2개 이상이다.
 
 비평 단계는 모든 질문을 원본에 대조해 `questionVerdicts` 를 낸다: `keep`(기준에 맞음) · `demote`(원본이 이미 답함 — `decision` 을 달아 결정으로 내림, 그 질문에 기대던 추론 항목은 같은 근거를 단 원본 근거 항목이 된다) · `drop`(중복·내용 없음, `reason`). 추론 항목이 가리키는 notice 는 drop 할 수 없고, 이전 결정과의 충돌 질문은 내리거나 제거할 수 없다.
+
+## 시안 규격 (v3)
+
+`designSpecDigests`는 S2d 렌더 증거 digest 목록이다. 스크립트가 채운다. 현재 증거와 다르면 다시 해석한다. 렌더 증거가 없거나 skipped면 출처 정책의 추가 게이트를 적용하지 않는다. v1·v2의 검증 계약은 유지한다.
+
+| 필드 | 뜻 |
+|---|---|
+| `designSpecs[]` | `{sourceId, element, requirement?, verdict, component?, reason, interaction?, question?}`. element는 S2d의 E 또는 I id다 |
+| `verdict` | strict(구조·문구·동작 준수), component-rule(기존 컴포넌트 규칙), htmlLimit(기준 렌더와 HTML의 차이) |
+| `interaction` | `{openPolicy:single|multi|unknown}`. 모든 범위 내 실측 상호작용은 requirement에 연결한다 |
+| `requirements[].category` | plan 근거 요구사항의 policy 또는 ui |
+| `requirements[].sourcePolicy` | `{classification, reason, evidence:[{sourceId,locator}]}` |
+| `planObservations[]` | `{classification, reason, sourceRefs, evidence?, question?}`. 채택하지 않는 관찰도 이유와 함께 기록한다 |
+
+측정된 구조·텍스트 순서·위치·크기·스타일·클릭 상태는 `design-spec/<sourceId>.json`의 해당 id를 근거로 삼는다. 측정 px는 목표값이 아니라 증거다. LLM이 시안 규격 행의 `componentHint:{component,size,variant,shape,classes}`를 판단한다. 사실 수집 단계는 hint를 null로 남긴다. `h-7`과 `w-(--badge-status-w-sm)`은 각각 높이 유틸리티와 너비 토큰이다. 너비 토큰의 접미사나 측정 px로 size를 결정하지 않는다. component-rule·htmlLimit은 실재하는 baseline id와 이유를 단다.
+
+| 출처·분류 | 계획서 반영 |
+|---|---|
+| plan / adopt | 정책·규칙·데이터 의미를 원본 근거로 채택한다 |
+| plan / existing-pattern | implementation의 실재 path:line을 evidence에 달고 기존 UI 패턴을 따른다 |
+| plan / omission-suspect | 기존 패턴의 누락 의심을 planObservations와 to:plan 질문으로 남긴다 |
+| plan / prototype-artifact | 임의 구현·미구현·데모 동작은 요구사항으로 만들지 않는다 |
+| design | 구조·동작·문구를 엄격히 따른다. 컴포넌트 규칙은 px보다 우선한다 |
+
+`basis:inferred`와 실재하는 `decision` id로 근거가 연결된 항목도 통과한다. 결정이 없으면 v2의 notice 질문 계약을 따른다. 코드 근거를 찾지 못한 UI를 기존 패턴으로 단정하지 않는다.
+
+실측 동작과 요구사항의 충돌은 재시도에서 해소한다. 미해결이면 `questions`에 `to:design`, `kind:confirm`, `designEvidence:{sourceId,interaction}`으로 남긴다. 연결 요구사항은 `resolution:pending`이다. 시안 규격 행의 `question`도 같은 질문을 가리킨다. 이 질문은 비평이 제거하지 않는다.
+
+S8 적합성의 판정·오차·토큰 누락·구현 지시서 계약은 [렌더 증거와 구현 적합성](design-conformance.md)에 있다.
 
 ## 후속 사례 (계보)
 

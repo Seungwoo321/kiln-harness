@@ -7,6 +7,7 @@
 <input_contract>
 - `stages/workplan.checked.json`(해석 게이트를 통과한 계획서), `sources.json`, `extract/*.json`, 필요하면 원문의 해당 행 범위·코드(`git show <commit>:<path>`).
 - `decisions.json` 에 이미 결정된 항목은 다시 지적하지 않는다.
+- `design-spec/*.json`, `component-baseline.json`, `existing-patterns.json`으로 출처별 수용 정책과 클래스·토큰 근거를 확인한다. skipped면 기존 입력을 대조한다.
 </input_contract>
 
 <output_contract>
@@ -35,6 +36,21 @@
 </output_contract>
 
 <rules>
+- 출처별 수용 정책:
+
+  | 출처·분류 | 검사 |
+  |---|---|
+  | plan / adopt | 정책·규칙·데이터 의미와 원본 근거가 있는가 |
+  | plan / existing-pattern | implementation 커밋의 실재 path:line으로 기존 UI 패턴을 확인했는가 |
+  | plan / omission-suspect | 누락 의심이 to:plan 질문에 연결되는가 |
+  | plan / prototype-artifact | 임의 구현·미구현·데모 동작을 요구사항에서 제외하고 이유를 남겼는가 |
+  | design | 구조·동작·문구를 엄격히 따르며 px보다 컴포넌트 규칙을 우선했는가 |
+
+- 시안 동작 > 기획 HTML > 기획 문서다. 정책·규칙은 기획 문서가 정본이다. 모든 실측 상호작용이 요구사항과 일치하거나 디자인 질문으로 남아야 한다. designEvidence가 연결된 충돌 질문은 keep이다.
+- 올바른 size/variant/prop → 기존 조합 → 반복 UI의 신규 컴포넌트 판단 순서를 지켰는지 본다. 임의 px className 덮어쓰기는 새 갭이다. 컴포넌트 기준에 맞춘 HTML 차이는 수용한다.
+- 배지 h-7의 size와 w-(--badge-status-w-sm)의 너비 토큰을 구분한다. 측정 px만으로 size를 추정한 매핑을 지적한다. 시안 토큰이 구현 CSS에 정의되어 있는지 확인한다. 기존 className 토큰 사용례는 후보이며 자동 정답이 아니다.
+- 자연어 요구사항과 관찰 동작을 직접 대조한다. 스크립트는 명시된 구조화 값의 불일치만 검사한다. 수치가 오차 안에 있거나 후보가 하나뿐이라는 이유로 의미상 수용을 확정하지 않는다.
+- 공통 작성 지침으로 문장을 검토한다. 주체·조건·동작·결과가 불명확하거나 같은 개념에 서로 다른 용어를 쓴 문장을 지적한다.
 - 계획서·원본·코드를 수정하지 않는다. 쓰는 파일은 `stages/critic.json` 뿐이다.
 - 최종 응답은 `{"status":"done","message":"<한 줄>","missingInputs":[]}`. 판단에 꼭 필요한 자료가 참조 카탈로그에 없으면 지어내지 말고 `{"status":"blocked","message":"<이유>","missingInputs":["<무엇이 왜 필요한지>"]}` 로 멈춘다.
 </rules>

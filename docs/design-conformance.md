@@ -1,0 +1,94 @@
+# 렌더 증거와 구현 적합성
+
+S2d는 시안의 렌더 사실을 수집한다. S4는 출처별 정책으로 사실을 해석한다. S5는 해석의 형식과 근거 연결을 검사한다. S8은 구현 사실을 수집한 뒤 별도 LLM 세션에서 적합성을 판정한다.
+
+## 스크립트와 판단의 경계
+
+| 스크립트가 수집·계산하는 사실 | LLM 또는 사람이 판단하는 사항 |
+|---|---|
+| DOM·텍스트 순서·상대 좌표·크기·계산 스타일 | 시안 요소와 구현 요소의 의미 대응 |
+| 클래스 원문·크기 유틸리티·참조 토큰·선언값 | 클래스 근거에 따른 componentHint의 size·variant·shape |
+| DS 페이지의 클래스·마크업·실측 규격 | 기존 컴포넌트의 적합성·조합·신규 컴포넌트 필요성 |
+| 클릭 전후 상태·single/multi 관찰값 | 관찰 동작과 자연어 요구사항의 충돌 여부 |
+| 토큰 선언 존재 여부·임의 px 클래스 존재 | 토큰 누락과 덮어쓰기에 대한 수정 방안 |
+| 같은 종류 UI의 git grep 사용례 | existing-pattern의 적합성·프로토타입 관찰 분류 |
+| 수치 차이·설정된 오차 안팎 | match·acceptable·gap 등 최종 판정 |
+| id 실재·digest·필수 필드·증거 커버리지 | 문장 명확성·정책의 의미·수용 여부 |
+
+후보에는 순위나 자동 선택 결과를 붙이지 않는다. 계산할 수 없는 의미를 정규식·점수표·픽셀 임계값으로 대신 판단하지 않는다.
+
+## S2d: 사실 수집
+
+Node 내장 WebSocket으로 Chrome DevTools Protocol을 호출한다. 의존성은 추가하지 않는다. Chrome은 KH_CHROME, 운영체제 기본 설치 위치, PATH 순으로 찾는다. Chrome 부재는 skipped다. 렌더·자산 로드 실패는 오류다.
+
+파일은 자산 루트의 루프백 정적 서버로 제공한다. 서버는 경로와 심볼릭 링크의 루트 이탈을 막는다. 코드 입력의 자산은 등록 커밋에서 git show로 읽는다. 작업 트리나 저장소 전체 복사본을 만들지 않는다. 화면에 보이는 이미지와 폰트가 준비되면 측정한다. 숨겨진 lazy 이미지의 decode를 기다리지 않는다.
+
+뷰포트 1440×1000, 배율 1, 로케일, 테마, Chrome 버전, 추출기 코드, 로드한 자산 digest가 렌더 입력이다. 포트·시각·임시 경로는 증거에 넣지 않는다. 기준 페이지 캐시는 입력과 자산이 같을 때만 재사용한다. 동적 서버나 외부 자산이 바뀌면 다른 입력이다.
+
+`design-spec/<sourceId>.json`은 schemaVersion:1, kind:DesignSpec, sourceId, inputDigest, render, elements, interactions, digest를 가진다.
+
+- elements는 id·locator·텍스트·순서·종류·기준 요소·상대 rect·텍스트 rect·필드 속성·계산 스타일을 가진다.
+- classes는 DOM 클래스 원문이다. utilities는 크기·간격 유틸리티 원문이다.
+- tokens는 참조 토큰 이름·계산값·시안 CSS의 선언값이다. 색은 가능한 경우 토큰 이름도 보존한다.
+- componentHint는 수집 단계에서 null이다. LLM은 클래스 근거로 매핑을 판단한다. 판단은 별도 산출물에 남겨 원본 사실의 digest를 유지한다.
+- interactions는 항목·초기 상태·클릭 후 상태·openPolicy:single|multi|unknown·reclick:close|stay|unknown을 가진다. 알 수 없는 동작은 unknown이다.
+
+반복 위젯은 details, ARIA, trigger/toggle 속성으로 탐색한다. 링크·제출 버튼은 클릭하지 않는다. 지원 범위 밖 위젯은 관찰하지 못한 것으로 남긴다.
+
+`component-baseline.json`은 시안이 참조하는 DS 컴포넌트 페이지의 클래스·마크업·규격을 캐시한다. 명시된 data-size 등의 속성은 사실이다. 관찰한 높이만으로 size를 만들지 않는다.
+
+`existing-patterns.json`은 implementation 입력의 고정 커밋에서 찾은 사용례다. 후보는 sourceId·path:line·검색어·코드 조각을 가진다. 비슷해 보인다는 이유로 자동 채택하지 않는다.
+
+## S4와 S5: 계획서
+
+| 출처·분류 | LLM이 결정하는 반영 방식 |
+|---|---|
+| plan / adopt | 정책·규칙·데이터 의미를 원본 근거로 채택한다 |
+| plan / existing-pattern | 실재하는 구현 코드 근거를 달고 기존 UI 패턴을 따른다 |
+| plan / omission-suspect | 기존 패턴의 누락 의심을 기획 질문으로 남긴다 |
+| plan / prototype-artifact | 임의 구현·미구현·데모 동작은 요구사항에서 제외한다 |
+| design | 구조·동작·문구를 엄격히 따른다. 컴포넌트 규칙은 px보다 우선한다 |
+
+시안 동작 > 기획 HTML > 기획 문서다. 정책·규칙은 기획 문서가 정본이다. LLM은 size/variant/prop → 기존 조합 → 반복 UI의 새 컴포넌트 판단 순서로 검토한다. 임의 px 덮어쓰기는 수정 후보로 올린다.
+
+배지 h-7의 size와 w-(--badge-status-w-sm)의 너비 토큰을 구분한다. 너비 토큰의 sm이나 측정 px만으로 size를 결정하지 않는다. componentHint는 component·size·variant·shape와 근거 클래스를 가진다.
+
+계획서 v3의 designSpecs는 증거 id·요구사항·컴포넌트·componentHint·strict|component-rule|htmlLimit 판정·이유를 연결한다. htmlLimit도 LLM이 기준 증거를 대조해 판단한다. 상호작용의 자연어 의미는 LLM이 읽는다. S5는 명시된 openPolicy와 관찰값의 불일치만 계산한다. 충돌이 해소되지 않으면 LLM이 to:design 질문을 쓰고 요구사항을 resolution:pending으로 둔다. 스크립트는 질문 내용을 생성하지 않는다.
+
+S5는 출처 분류의 존재와 실재 근거를 검사한다. 분류의 적합성은 독립 critic이 검토한다. v1·v2는 기존 계약을 유지한다. 렌더 증거가 없으면 추가 정책 게이트는 skipped다.
+
+## S8: 사실과 판정
+
+`node scripts/verify.mjs <case|--root dir> --url <http(s) URL> --code <기능 폴더> [--theme dark|light] [--source id]`로 실행한다. 여러 시안은 source로 화면에 대응시킨다.
+
+1. 같은 추출기로 구현 화면의 사실을 수집한다.
+2. 시안 요소별로 텍스트·종류 등이 정확히 같은 후보와 수치 차이를 제시한다. 대응을 확정하지 않는다.
+3. 구현 코드에서 DS JSX의 임의 px 클래스와 CSS 토큰 선언을 수집한다. 토큰 정의는 코드 레포의 추적·비무시 CSS에서 찾는다.
+4. conformance-facts.json에 사실·후보·digest를 기록한다.
+5. scripts/run.mjs가 roles/conformance.md를 별도 claude 또는 codex 세션으로 실행한다.
+6. 형식 게이트는 모든 사실에 판정과 실재 근거가 있는지 검사한다. 위반은 다음 시도에 주입한다.
+7. 검증된 판정을 conformance.json·review.html·conformance-brief.md로 렌더한다.
+
+위치·크기 ±1px, 간격 ±2px는 기본 비교 정보다. kh.config.json에서 바꾼다. 오차 안팎을 사실로 제공하며 그 값으로 의미상 수용을 확정하지 않는다.
+
+| LLM 판정 | 뜻 |
+|---|---|
+| match | 의미와 동작이 대응하며 관찰 차이가 없음 |
+| acceptable | 차이가 있으나 컴포넌트 규칙 등 확인된 근거로 수용함 |
+| gap | 설명되지 않는 차이. 수정 필요 |
+| ds-override | 임의 px 클래스가 컴포넌트 규칙을 덮어씀 |
+| token-missing | 시안의 참조 토큰이 구현 CSS에 정의되지 않음 |
+| needs-component | 기존 컴포넌트 매핑이 없어 조합·신규 판단 필요 |
+| behavior-mismatch | 상호작용 규칙이 다름. 디자인 확인 필요 |
+
+모든 판정은 factIds·이유·근거를 가진다. acceptable은 기준 또는 코드 근거를 가진다. 스크립트는 이 연결을 검사한다. 판정의 타당성은 LLM·사람이 검토한다. 판단 결과가 없으면 needs-judgment이며 통과가 아니다.
+
+gap·ds-override·token-missing·behavior-mismatch 판정이 있으면 종료 코드 1이다. needs-component는 경고다. 도구·형식 오류는 2다. 자료 보강이나 판단이 필요하면 3이다. Chrome·시안 증거 부재는 skipped와 이유를 기록한다.
+
+구현 지시서 머리말에는 컴포넌트 우선 원칙과 판단 순서를 적는다. 같은 종류 컴포넌트의 토큰 className 사용례를 후보로 제공한다.
+
+## 작성과 근거
+
+문서·명세·질문은 [작성 지침](writing.md)을 따른다. 문장의 의미와 명확성은 LLM이 검토한다.
+
+CDP 계약은 [Page](https://chromedevtools.github.io/devtools-protocol/tot/Page/)와 [Runtime](https://chromedevtools.github.io/devtools-protocol/tot/Runtime/)을 따른다. 직접 CDP를 사용해 의존성을 늘리지 않는다. 클래스·토큰·코드 탐색은 후보를 제공하고 의미 판단은 별도 세션에 둔다.

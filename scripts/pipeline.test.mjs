@@ -57,7 +57,7 @@ test('정상 흐름: 범위 → 해석 → 비평 → 렌더, 상태 기록', ()
   const r = go(dir, agent);
   assert.equal(r.ok, true);
   const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
-  assert.equal(plan.schemaVersion, 2); assert.equal(plan.findings.length, 1); assert.equal(plan.tasks[0].changeKind, 'new-page');
+  assert.equal(plan.schemaVersion, 3); assert.equal(plan.findings.length, 1); assert.equal(plan.tasks[0].changeKind, 'new-page');
   for (const f of ['review.html', 'WORKPLAN.md', 'WORKPLAN.html', 'scope.json']) assert.ok(existsSync(join(dir, f)), f);
   const status = JSON.parse(readFileSync(join(dir, 'run-status.json'), 'utf8'));
   assert.equal(status.result, 'passed'); assert.equal(status.usage.calls, 3); assert.equal(status.stages.interpret.result, 'passed');

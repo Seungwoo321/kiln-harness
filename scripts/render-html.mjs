@@ -6,7 +6,7 @@ const code = (v) => `<code>${esc(v)}</code>`;
 const json = (v) => (typeof v === 'string' ? esc(v) : `<pre>${esc(JSON.stringify(v, null, 2))}</pre>`);
 const refs = (rs = []) => rs.map((r) => `<span class="ref">${code(r.sourceId)} ${esc(r.locator)}</span>`).join('');
 const pill = (text, tone) => `<span class="pill ${tone}">${esc(text)}</span>`;
-const basis = (x) => (x.basis === 'inferred' ? pill(`추론 → ${x.question}`, 'warn') : pill('원본', 'ok'));
+const basis = (x) => (x.resolution === 'pending' ? pill('확인 필요', 'warn') : x.basis === 'inferred' ? pill(`추론 → ${x.question ?? x.decision}`, 'warn') : pill('원본', 'ok'));
 const table = (head, rows) => rows.length === 0 ? '<p class="empty">없음</p>'
   : `<div class="scroll"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 const list = (items) => `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`;
@@ -37,6 +37,7 @@ export function renderHtml(p) {
     ['questions', '확인 필요', table(['id', '대상', '질문', '선택지', '기본 가정', '영향'], p.questions.map((q) => [code(q.id), pill(q.to, 'warn'), esc(q.question), list(q.options ?? []), esc(q.assumption), `<span class="small">${esc((q.impact ?? []).join(', '))}</span>`]))],
   ];
   const counts = [['화면', p.surfaces.length], ['요구사항', p.requirements.length], ['상태', p.states.length], ['컴포넌트', p.components.length], ['API', p.apiBindings.length], ['작업', p.tasks.length], ['확인 필요', p.questions.length]];
+  if (p.designSpecs?.length) sections.push(['design-specs', '시안 규격', '<p>측정 px는 증거다. 컴포넌트 규칙을 우선한다.</p>' + table(['출처 · 증거', '요구사항', '판정', '컴포넌트', '근거', '측정 증거'], p.designSpecs.map(d => [code(`${d.sourceId}:${d.element}`), esc(d.requirement), esc(d.verdict), json(d.componentHint ?? d.component ?? ''), esc(d.reason), `<details><summary>요소·규격·동작</summary>${json(d.observation ?? {})}</details>`]))]);
 
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

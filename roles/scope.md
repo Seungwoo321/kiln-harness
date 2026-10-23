@@ -7,6 +7,7 @@
 <input_contract>
 - 사례 폴더의 `sources.json`(원본 목록·역할), `extract/<sourceId>.json`(앵커: 화면 제목·id·라우트 키·주석 마커·문서 절).
 - context 역할 원본에 적힌 확정 범위·결정이 있으면 그것이 원본 판단보다 앞선다.
+- design-spec이 있으면 렌더된 구조와 상호작용 id를 함께 확인한다. skipped는 입력 부재나 실패로 해석하지 않는다. 정책의 정본은 기획 문서이며 UI 프로토타입의 임의 구현을 범위 확정 근거로 삼지 않는다.
 - 원문이 필요하면 앵커의 행 범위만 읽는다(`sed -n '<a>,<b>p'`). 코드는 `git show <commit>:<path>` 로 읽는다.
 </input_contract>
 

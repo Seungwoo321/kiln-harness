@@ -6,6 +6,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { makeResolver } from './lib/locators.mjs';
 import { DEFAULT_LEVEL, tierOf } from './lib/levels.mjs';
+import { readDesignSpecs, validateDesignPolicy } from './lib/design-policy.mjs';
 
 const ENUMS = {
   change: ['new', 'changed'],
@@ -47,7 +48,7 @@ export function validate(caseDir, planOverride) {
     .flatMap((s) => extracts[s.id].anchors.filter((a) => a.type === 'file').map((a) => a.value)));
 
   // envelope
-  if (![1, 2].includes(plan.schemaVersion)) err('envelope', 'schemaVersion 은 1 또는 2');
+  if (![1, 2, 3].includes(plan.schemaVersion)) err('envelope', 'schemaVersion 은 1, 2 또는 3');
   const v2 = plan.schemaVersion >= 2;
   const lv = plan.level ?? DEFAULT_LEVEL;
   if (!Number.isInteger(lv) || lv < 0 || lv > 10) err('envelope', `level 은 0~10 정수 (${lv})`);
@@ -86,7 +87,7 @@ export function validate(caseDir, planOverride) {
   const fittedNeedsDecision = [];
   const basisCheck = (w, item) => {
     oneOf(w, 'basis', item.basis, 'basis');
-    if (item.basis === 'inferred') inferredNeedsQuestion.push([w, item.question]);
+    if (item.basis === 'inferred' && !(plan.schemaVersion >= 3 && (plan.decisions ?? []).some(d => d.id === item.decision))) inferredNeedsQuestion.push([w, item.question]);
     if (item.basis === 'fitted') {
       if (level !== 'fit') err(w, `basis:fitted 는 level:fit 에서만 쓴다 (level=${level})`);
       fittedNeedsDecision.push([w, item.decision]);
@@ -283,6 +284,12 @@ export function validate(caseDir, planOverride) {
       if (!ids.has(d.id)) err(w, `계획서에 없는 id — ${d.id}`);
     });
   }
+  try {
+    const specs = readDesignSpecs(caseDir, registry);
+    const baseline = specs.length && existsSync(join(caseDir, 'component-baseline.json')) ? read('component-baseline.json') : { samples: [] };
+    errors.push(...validateDesignPolicy(plan, registry, specs, locators, baseline));
+  }
+  catch (e) { err('design-spec', e.message); }
   return errors;
 }
 

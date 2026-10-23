@@ -1,12 +1,21 @@
 {
   "name": "kiln-harness",
-  "interface": { "displayName": "kiln-harness" },
+  "interface": {
+    "displayName": "kiln-harness"
+  },
   "plugins": [
     {
       "name": "kiln-harness",
-      "source": { "source": "local", "path": "./" },
-      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
-      "category": "Productivity"
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "version": "0.2.0"
     }
   ]
 }

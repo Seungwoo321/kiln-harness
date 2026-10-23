@@ -20,11 +20,31 @@
 | S1 register | 스크립트 | 입력 경로 목록 → `sources.json` (id·kind·role·path·sha256·bytes) |
 | S2 extract | 스크립트 | 원본 → `extract/<sourceId>.json` (화면 앵커·주석 마커·라우트 키·문서 절·operation 목록·코드 인벤토리) |
 | S2c catalog | 스크립트 | `sources.json` → `references.json` (자료별 접근 방법·위치·줄 수, 역할별 부재 경고). 모든 단계 프롬프트에 들어간다 |
+| S2d design-spec | 스크립트 | 디자인 HTML → `design-spec/<sourceId>.json`·`component-baseline.json`·`existing-patterns.json`. 실행 순서는 extract → design-spec → catalog다 |
 | S3 scope | 에이전트 `roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다 |
 | S4 interpret | 에이전트 `roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
 | S5 validate | 스크립트 | 후보 계획서 → 위반 목록 (아래 게이트). 위반은 S4 의 다음 시도에 주입된다 |
 | S6 critic | 에이전트 `roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재 |
 | S7 render | 스크립트 | `WORKPLAN.md` · `WORKPLAN.html`(전체 문서) · `review.html`(변경 유형·지적·결정 화면) |
+| S8 verify | 스크립트 + 에이전트 `roles/conformance.md` | 구현 URL·코드 → `conformance-facts.json` → LLM 판정 → `conformance.json`·`conformance-brief.md`·review.html의 시안 적합성 절 |
+
+## 출처별 수용 정책
+
+| 출처·분류 | 적용 |
+|---|---|
+| plan / adopt | 정책·규칙·데이터 의미만 원본 근거로 채택한다 |
+| plan / existing-pattern | implementation 커밋의 같은 UI 사용례를 근거로 기존 패턴을 따른다 |
+| plan / omission-suspect | 기존 패턴의 누락 의심을 기획 질문으로 남긴다 |
+| plan / prototype-artifact | 임의 구현·미구현·데모 동작을 제외하고 이유를 기록한다 |
+| design | 구조·동작·문구를 엄격히 따른다. px보다 컴포넌트 규칙이 우선한다 |
+
+기획 UI의 분류는 에이전트가 판단한다. 스크립트는 근거 경로·증거 id·동작 충돌을 검사한다. 컴포넌트 적용 순서는 size/variant/prop → 기존 조합 → 반복 UI의 신규 컴포넌트 판단이다. 임의 px 덮어쓰기는 새 갭이다.
+
+S2d는 로컬 Chrome과 Node 내장 WebSocket을 사용한다. 파일은 상대 자산 루트의 정적 서버로 렌더한다. Chrome 부재는 references.json과 run-status.json의 `design-spec:skipped`에 이유를 남긴다. 렌더 실패는 실패다. 데이터·캐시·프로토콜 계약은 [설계](design-conformance.md)를 따른다.
+
+S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code`의 JSX에서 임의 크기 클래스 존재와 CSS 토큰 선언 여부를 수집한다. 기존 className 토큰 사용례를 후보로 제공한다. 수치 차이와 오차 안팎은 사실이다. 의미 대응과 acceptable·gap 등 판정은 별도 LLM 세션이 맡는다. `run.mjs --conformance`는 수집된 사실에 대한 판정만 재실행한다. gap·ds-override·token-missing·behavior-mismatch 판정은 종료 코드 1이다. needs-component는 경고다. 판단을 완료하지 못하면 3이다.
+
+범위·해석·비평·적합성 역할은 [문서와 명세 작성 지침](writing.md)을 공통 입력으로 받는다. 스크립트는 문장 품질을 자동 판정하지 않는다.
 
 ## 실행 구조
 
@@ -73,8 +93,11 @@ cases/<case>/
   decisions.json     # 사용자 결정 (decide.mjs)
   scope.json         # S3
   stages/            # 에이전트 작업물 (scope.json · workplan.draft.json · critic.json)
-  workplan.json      # S4~S6 (schemaVersion 2)
+  design-spec/       # S2d 요소·동작·클래스·토큰 증거
+  component-baseline.json · existing-patterns.json · design-spec-status.json
+  workplan.json      # S4~S6 (schemaVersion 3)
   WORKPLAN.md · WORKPLAN.html · review.html   # S7
   run-status.json    # 단계별 시도·토큰·결과·위반
+  conformance-facts.json · conformance.json · conformance-brief.md   # S8
   failed/            # 실패한 전체 시도의 스냅샷
 ```

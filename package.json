@@ -12,6 +12,9 @@
     "extract": "node scripts/extract.mjs",
     "validate": "node scripts/validate.mjs",
     "render": "node scripts/render.mjs",
-    "test": "node --test 'scripts/*.test.mjs'"
-  }
+    "test": "node --test 'scripts/*.test.mjs'",
+    "design-spec": "node scripts/design-spec.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "version": "0.2.0"
 }

@@ -8,6 +8,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { canonical, sha256 } from './register.mjs';
+import { readDesignSpecs } from './lib/design-policy.mjs';
 
 const ROLE_HINT = {
   plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', context: '확정 결정·배경 문서',
@@ -40,6 +41,10 @@ export function buildCatalog(caseDir) {
   const byRole = Object.fromEntries(Object.keys(ROLE_HINT).map((r) => [r, sources.filter((x) => x.role === r).map((x) => x.id)]));
   const missingRoles = Object.keys(ROLE_HINT).filter((r) => byRole[r].length === 0);
   const catalog = { schemaVersion: 1, kind: 'ReferenceCatalog', caseId: registry.caseId, ...(registry.brief ? { brief: registry.brief } : {}), sources, byRole, missingRoles, warnings: missingRoles.map((r) => `${r}: ${COVERAGE_WARN[r]}`) };
+  const statusFile = join(caseDir, 'design-spec-status.json');
+  if (existsSync(statusFile)) catalog.designSpec = { ...JSON.parse(readFileSync(statusFile, 'utf8')), summary: readDesignSpecs(caseDir, registry).map(s => ({ sourceId: s.sourceId, theme: s.render.theme, interactions: s.interactions.map(i => ({ id: i.id, kind: i.kind, items: i.items.map(x => x.label), openPolicy: i.openPolicy, initial: i.initial, reclick: i.reclick })), componentCandidates: s.elements.filter(e => e.componentCandidates?.length).map(e => ({ element: e.id, candidates: e.componentCandidates.map(c => c.baseline) })) })) };
+  const patternFile = join(caseDir, 'existing-patterns.json');
+  if (existsSync(patternFile)) catalog.existingPatterns = JSON.parse(readFileSync(patternFile, 'utf8')).candidates.length;
   catalog.digest = sha256(canonical(catalog));
   writeFileSync(join(caseDir, 'references.json'), `${JSON.stringify(catalog, null, 2)}\n`);
   return catalog;

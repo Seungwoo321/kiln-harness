@@ -11,7 +11,7 @@ const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>')
 const refs = (rs = []) => rs.map((r) => `\`${r.sourceId}\` ${r.locator}`).join('<br>');
 const table = (head, rows) => rows.length === 0 ? '_없음_\n'
   : `| ${head.join(' | ')} |\n|${head.map(() => '---').join('|')}|\n${rows.map((r) => `| ${r.map(cell).join(' | ')} |`).join('\n')}\n`;
-const basis = (x) => (x.basis === 'inferred' ? `추론 → ${x.question}` : '원본');
+const basis = (x) => (x.resolution === 'pending' ? '확인 필요' : x.basis === 'inferred' ? `추론 → ${x.question ?? x.decision}` : '원본');
 const json = (v) => (typeof v === 'string' ? v : JSON.stringify(v));
 
 export function render(caseDir) {
@@ -66,6 +66,10 @@ export function render(caseDir) {
 
   out.push('\n## 9. 확인 필요\n');
   out.push(table(['id', '대상', '질문', '선택지', '기본 가정', '영향'], p.questions.map((q) => [q.id, q.to, q.question, (q.options ?? []).join(' / '), q.assumption, (q.impact ?? []).join(', ')])));
+  if (p.designSpecs?.length) {
+    out.push('\n## 시안 규격\n\n측정 px는 증거다. 컴포넌트 규칙을 우선한다.\n');
+    out.push(table(['출처 · 증거', '요구사항', '판정', '컴포넌트', '근거', '측정 증거'], p.designSpecs.map(d => [`${d.sourceId}:${d.element}`, d.requirement ?? '', d.verdict, json(d.componentHint ?? d.component ?? ''), d.reason, json(d.observation ?? {})])));
+  }
 
   const md = `${out.join('\n')}`.replace(/\n{3,}/g, '\n\n');
   writeFileSync(join(caseDir, 'WORKPLAN.md'), md.endsWith('\n') ? md : `${md}\n`);

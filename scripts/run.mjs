@@ -12,13 +12,14 @@
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { parseLevel } from './lib/levels.mjs';
-import { runPipeline } from './lib/pipeline.mjs';
+import { runPipeline, runConformance } from './lib/pipeline.mjs';
 
 function parseArgs(argv) {
   const args = { open: false, force: false, dir: null, stageAttempts: 0, loopAttempts: 0 };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--open') args.open = true;
+    else if (a === '--conformance') args.conformance = true;
     else if (a === '--force') args.force = true;
     else if (a === '--attempts') args.stageAttempts = Number(argv[(i += 1)]);
     else if (a === '--loops') args.loopAttempts = Number(argv[(i += 1)]);
@@ -37,6 +38,6 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const result = runPipeline(args.dir, args);
+const result = args.conformance ? runConformance(args.dir, args) : runPipeline(args.dir, args);
 if (result.ok && args.open) execFileSync('open', [join(args.dir, 'review.html')]);
 process.exit(result.ok ? 0 : result.needsInput ? 3 : 1); // 3 = 입력 보강 필요

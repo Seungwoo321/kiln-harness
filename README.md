@@ -59,6 +59,9 @@ node scripts/run.mjs cases/<case> --attempts 3 --loops 1   # 단계당 재시도
 node scripts/run.mjs cases/<case> --level 3               # 검토 수준 0~10 (기본 5). 낮을수록 끼워 맞춰 구현하고 구현 불가만 묻는다, 높을수록 체계적으로 검증한다
 node scripts/decide.mjs cases/<case> <id> <stance> "<결정>"  # 검토 화면의 id 에 결정을 남긴다 → run.mjs 를 다시 돌리면 반영
 node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stale] = 항목이 바뀌어 재확인 필요)
+node scripts/design-spec.mjs cases/<case>         # 렌더 증거만 수집 (sources.json 필요)
+node scripts/verify.mjs cases/<case> --url http://127.0.0.1:3000/ --code ../app/src/feature --theme dark
+node scripts/verify.mjs --root <사례 폴더> --url http://127.0.0.1:3000/ --code <기능 폴더> --source <시안 id>
 ```
 
 - 결과: `review.html`(변경 유형·지적·질문·결정 화면), `WORKPLAN.html`·`WORKPLAN.md`(전체 문서), `run-status.json`(단계별 시도·토큰·시간·위반).
@@ -67,15 +70,19 @@ node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stal
 - 단계별 러너·모델은 `kh.config.json`(기본) → `cases/<case>/kh.config.json` → 환경변수 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT|SESSION>` 순으로 덮는다. `claude`·`codex` 와 각 CLI 가 지원하는 모델이면 무엇이든 된다.
 - 사례는 `cases/<case>/inputs.json` 에 원본 경로와 역할을 적어 시작한다(입력 구성은 `docs/pipeline.md`). 사례 폴더는 업무 자료라 레포에 올리지 않는다.
 - 이미 만든 `workplan.json` 이 있는 사례를 다시 돌리면 **최종 실패 시 그 산출물이 삭제된다.** 먼저 사례 폴더를 복사해 둔다.
+- S2d는 시안의 상대 좌표·스타일·클래스·토큰·클릭 동작과 DS 기준을 수집한다. Chrome은 `KH_CHROME`, 기본 설치 경로, PATH 순으로 찾는다. Chrome 부재는 `design-spec:skipped`로 기록한다.
+- S8은 `conformance-facts.json`에 사실을 수집한다. 별도 LLM 세션이 의미 대응과 수용 여부를 판단한다. 결과는 `conformance.json`, 검토 화면의 **시안 적합성**, `conformance-brief.md`다. gap·ds-override·token-missing·behavior-mismatch 판정이 있으면 종료 코드 1이다. needs-component는 경고다. 판단 미완료는 3이다. 여러 시안은 `--source`로 화면에 대응시킨다.
+- plan UI는 기존 코드 패턴을 우선한다. design의 구조·동작·문구는 엄격히 따른다. px보다 컴포넌트 규칙이 우선한다. 정책·분류표는 [파이프라인](docs/pipeline.md#출처별-수용-정책)을 따른다.
 
 ## 동작 방식
 
 ```
-inputs.json ─▶ register ─▶ extract ─▶ catalog ─▶ scope ─▶ interpret ─▶ (validate) ─▶ critic ─▶ render
-  (자료·역할)    (sha256)    (앵커)     (참조 카탈로그)   (범위)      (해석)       (게이트)       (비평)    (review.html …)
+inputs.json → register → extract → design-spec → catalog → scope → interpret → (validate) → critic → render
+                                   (렌더 증거)                                                    ↓ 구현 후
+                              design-spec + 구현 URL·코드 → verify → conformance.json · conformance-brief.md
 ```
 
-- 결정적 처리(등록·추출·카탈로그·검증·렌더)는 스크립트가, 판단(범위·해석·비평)은 에이전트(`roles/*.md`)가 맡는다.
+- 결정적 처리(등록·추출·카탈로그·형식 검증·렌더)는 스크립트가 맡는다. 의미 판단(범위·해석·비평·적합성)은 에이전트(`roles/*.md`)가 맡는다. 문서와 명세는 [작성 지침](docs/writing.md)을 따른다.
 - 단계마다 게이트가 결과를 검사하고, 위반은 다음 시도에 주입된다(단계당 최대 3회, 전체 최대 3회). 최종 실패하면 파생 산출물을 지우고 처음부터 다시 한다.
 - 같은 주제 안에서는 세션 id 로 대화를 이어간다(비평은 생산자와 분리하려고 새 세션).
 - 질문은 담당자에게 전달되는 두 종류(`confirm` · `notice`)만 남고, 원본이 이미 답한 것은 근거와 함께 `decisions` 로 기록된다.
@@ -85,6 +92,7 @@ inputs.json ─▶ register ─▶ extract ─▶ catalog ─▶ scope ─▶ in
 
 - [`docs/pipeline.md`](docs/pipeline.md) — 단계, 게이트, 실행 구조, 입력 구성
 - [`docs/workplan-format.md`](docs/workplan-format.md) — 산출물 형식과 판정 규칙
+- [`docs/design-conformance.md`](docs/design-conformance.md) — 렌더 증거·컴포넌트·토큰·적합성 판정
 
 ## 개발
 

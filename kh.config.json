@@ -23,6 +23,19 @@
       "model": "opus",
       "effort": "high",
       "session": "fresh"
+    },
+    "conformance": {
+      "runner": "claude",
+      "model": "sonnet",
+      "effort": "high",
+      "session": "fresh"
+    }
+  },
+  "conformance": {
+    "tolerances": {
+      "position": 1,
+      "size": 1,
+      "spacing": 2
     }
   }
 }

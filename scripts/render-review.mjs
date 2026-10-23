@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 import { validate } from './validate.mjs';
 import { canonical, sha256 } from './register.mjs';
 import { readDecisions, staleDecisions } from './decide.mjs';
+import { conformanceSection } from './lib/conformance-view.mjs';
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const text = (v) => esc(typeof v === 'string' ? v : JSON.stringify(v)).replace(/\n/g, '<br>');
@@ -37,7 +38,7 @@ export function renderReview(caseDir) {
   };
   const idCell = (id) => `<td class="idc"><code class="id" id="${esc(id)}">${esc(id)}</code>${decisionBadge(id)}</td>`;
   const refs = (rs = []) => rs.map((r) => `<code>${esc(r.sourceId)}</code> ${esc(r.locator)}`).join('<br>');
-  const basis = (x) => (x.basis === 'inferred' ? `<span class="tag warn">추론</span> ${esc(x.question)}` : '<span class="tag">원본</span>');
+  const basis = (x) => (x.resolution === 'pending' ? '<span class="tag warn">확인 필요</span>' : x.basis === 'inferred' ? `<span class="tag warn">추론</span> ${esc(x.question ?? x.decision)}` : '<span class="tag">원본</span>');
   const table = (head, rows) => (rows.length === 0 ? '<p class="none">없음</p>'
     : `<div class="scroll"><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`);
   const row = (id, cells) => `<tr>${idCell(id)}${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
@@ -115,6 +116,12 @@ export function renderReview(caseDir) {
     p.apiBindings.map((b) => row(b.id, [`<code>${esc(b.operationId)}</code>`, `${surfaceTitle(b.surface)} · <a href="#${esc(b.component)}">${esc(b.component)}</a>`, esc(b.trigger), text(b.request), text(b.response), text(b.errors)])))));
   parts.push(section('i18n', '다국어 문구', table(['키', '구분', '문구'], (p.i18n ?? []).map((k) => `<tr><td><code>${esc(k.key)}</code></td><td>${esc(k.status)}</td><td>${text(k.text ?? '')}</td></tr>`))));
   parts.push(section('gaps', '현재 구현과의 차이', table(['id', '화면', '현재', '목표', '파일'], p.gaps.map((g) => row(g.id, [surfaceTitle(g.surface), text(g.current), text(g.target), g.file ? `<code>${esc(g.file)}</code>` : ''])))));
+  if (p.designSpecs?.length) parts.push(section('design-specs', '시안 규격', table(['출처 · 증거', '요구사항', '판정', '컴포넌트', '근거', '측정 증거'], p.designSpecs.map(d => `<tr><td>${esc(d.sourceId)}:${esc(d.element)}</td><td>${esc(d.requirement)}</td><td>${esc(d.verdict)}</td><td>${text(d.componentHint ?? d.component ?? '')}</td><td>${text(d.reason)}</td><td><details><summary>요소·규격·동작</summary>${text(d.observation ?? {})}</details></td></tr>`)), '측정 px는 증거다. 컴포넌트 규칙을 우선한다.'));
+  const conformancePath = join(caseDir, 'conformance.json');
+  if (existsSync(conformancePath)) {
+    const report = JSON.parse(readFileSync(conformancePath, 'utf8'));
+    if (!p.designSpecDigests || canonical(report.inputDigests) === canonical(p.designSpecDigests)) parts.push(conformanceSection(report));
+  }
 
   const nav = [['kinds', '변경 유형'], ...(v2 ? [['findings', '지적']] : []), ...(p.lineage ? [['lineage', '계보']] : []), ['questions', '전달'], ...(v2 ? [['decisions', '결정 기록']] : []), ['scope', '범위'], ['requirements', '요구사항'], ['states', '상태'], ['components', '컴포넌트'], ['api', 'API'], ['i18n', '다국어'], ['gaps', '차이']]
     .map(([k, l]) => `<a href="#sec-${k}">${l}</a>`).join('');
