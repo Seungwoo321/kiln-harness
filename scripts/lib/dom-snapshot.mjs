@@ -116,6 +116,7 @@ export async function snapshotDOM(options = {}) {
     for (let i = 0; i < initial.length; i++) if (initial[i] !== null && state(g.triggers[i]) !== initial[i]) { g.triggers[i].click(); await settle(); }
     interactions.push({ id, kind: g.kind, locator: locator(g.group), items, initial, first, openPolicy, reclick, steps });
   }
-  const theme = document.documentElement.dataset.theme ?? (document.documentElement.classList.contains('dark') ? 'dark' : null) ?? (getComputedStyle(document.documentElement).colorScheme.includes('dark') ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  const themeRoot = root.closest('[data-theme],.dark,.light') ?? document.documentElement;
+  const theme = themeRoot.dataset.theme ?? (themeRoot.classList.contains('dark') ? 'dark' : themeRoot.classList.contains('light') ? 'light' : null) ?? (getComputedStyle(themeRoot).colorScheme.includes('dark') ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
   return { reference: locator(root), theme, elements: [...elements.values()], interactions };
 }
