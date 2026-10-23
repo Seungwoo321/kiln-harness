@@ -91,7 +91,7 @@ export function renderReview(caseDir) {
       list(q.options), text(q.assumption), (q.impact ?? []).map((i) => `<a href="#${esc(i)}">${esc(i)}</a>`).join(', ')])))}`,
     '확인 요청(confirm): 원본끼리 다름·한쪽 잘못·패턴 위반 제안. 알림(notice): 원본에 정의가 없어 추론·개발 결정한 것.'));
   if (v2 && (p.decisions ?? []).length) {
-    const DK = { 'answered-by-source': '원본이 명시함', 'sources-agree': '원본끼리 같음', 'single-source': '한쪽에만 있어 따름' };
+    const DK = { 'answered-by-source': '원본이 명시함', 'sources-agree': '원본끼리 같음', 'single-source': '한쪽에만 있어 따름', fitted: '끼워 맞춤' };
     parts.push(section('decisions', '원본이 이미 답한 것 — 결정 기록', table(['id', '종류', '결정', '근거', '출처'],
       p.decisions.map((d) => row(d.id, [`<span class="tag">${esc(DK[d.kind] ?? d.kind)}</span>`, text(d.statement), text(d.rationale), refs(d.sourceRefs)]))), '질문이 아니다 — 담당자에게 전달하지 않는다.'));
   }

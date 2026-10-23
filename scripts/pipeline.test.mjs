@@ -118,6 +118,16 @@ test('원본·결정이 그대로면 에이전트를 부르지 않는다', () =>
   assert.equal(r.skipped, true); assert.equal(again.calls.length, 0);
 });
 
+test('검토 수준이 바뀌면 같은 원본·결정이어도 범위만 이어받고 계획서는 처음부터 다시 해석하며, 프롬프트에 수준이 실린다', () => {
+  const { dir } = fixture(); go(dir, fakeAgent());
+  const same = fakeAgent(); assert.equal(go(dir, same, { level: 5 }).skipped, true); assert.equal(same.calls.length, 0);
+  const lower = fakeAgent(); const r = go(dir, lower, { level: 2 });
+  assert.equal(r.skipped, undefined);
+  assert.equal(lower.calls.filter((c) => c.stage === 'scope').length, 0);
+  assert.ok(lower.calls.filter((c) => c.stage === 'interpret').every((c) => c.prompt.includes('검토 수준 2/10') && !c.prompt.includes('기존 계획서가 workplan.json')));
+  assert.equal(JSON.parse(readFileSync(join(dir, 'run-status.json'), 'utf8')).level, 2);
+});
+
 test('결정만 바뀌면 범위는 이어받고 기존 계획서 위에서 해석만 다시 한다', () => {
   const { dir } = fixture(); go(dir, fakeAgent());
   decide(dir, 'R1', 'follow-existing', '기존 패턴 따름');

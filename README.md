@@ -33,11 +33,24 @@ codex plugin add kiln-harness@kiln-harness
 
 변환 파이프라인은 스킬 안에서 돌지 않고 **터미널의 `node scripts/run.mjs`** 가 단계마다 새 세션으로 `claude -p` 또는 `codex exec` 를 띄워 돌린다. Node 22 이상이 필요하다.
 
+## 검토 수준 (`--level 0~10`, 기본 5)
+
+근거 자료로 구현을 어디까지 **끼워 맞추고**, 어디서부터 **물을지**를 정한다. 5 로 돌려 보고, 질문이 많으면 0~4 로, 끼워 맞춤이 의심스러우면 6~10 으로 이진 탐색하듯 좁힌다. 수준이 바뀌면 범위(`scope.json`)만 이어받고 계획서는 처음부터 다시 해석한다.
+
+| 수준 | 동작 |
+|---|---|
+| 0~3 느슨 | 근거 자료에서 가장 가까운 해석으로 끼워 맞춰 구현한다. 끼워 맞춘 것은 `decisions`(`kind:"fitted"`, 검토한 다른 해석 `alternatives` 필수)로 남기고, 질문은 **구현이 불가능한 것**(`blocking:true` + `blockedReason` + 시도한 끼워 맞춤 `triedFits` 2개 이상, 0 은 3개 이상)만 남긴다 |
+| 4~6 표준 | 5 = 원본이 답한 것은 결정, 원본끼리 다르거나 정의가 없으면 질문. 4 는 애매하면 원본을 따라 결정으로, 6 은 애매하면 질문으로 |
+| 7~10 엄격 | 7 모든 요구사항·상태가 task 에 연결 · 8 비평이 화면마다 기획·디자인·계약을 모두 대조한 기록(`coverage`) 요구 · 9 요구사항마다 수용기준 2개 이상 · 10 가장 보수적인 판정 |
+
+환경변수 `KH_LEVEL`, `kh.config.json` 의 `"level"` 로도 정한다(우선순위: `--level` > `KH_LEVEL` > 사례 폴더 설정 > 기본 5).
+
 ## 사용
 
 ```bash
 node scripts/run.mjs cases/<case>                  # 한 번에: 등록 → 추출 → 카탈로그 → 범위 → 해석 → 검증 → 비평 → 렌더
 node scripts/run.mjs cases/<case> --attempts 3 --loops 1   # 단계당 재시도 3회, 전체 재시작 1회(처음 돌릴 때 비용 상한)
+node scripts/run.mjs cases/<case> --level 3               # 검토 수준 0~10 (기본 5). 낮을수록 끼워 맞춰 구현하고 구현 불가만 묻는다, 높을수록 체계적으로 검증한다
 node scripts/decide.mjs cases/<case> <id> <stance> "<결정>"  # 검토 화면의 id 에 결정을 남긴다 → run.mjs 를 다시 돌리면 반영
 node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stale] = 항목이 바뀌어 재확인 필요)
 ```

@@ -96,6 +96,9 @@ changeKind 와 covers 의 정합(결정적 검사)
 | `answered-by-source` | 원본이 명시함 |
 | `sources-agree` | 기획 HTML 과 디자인 등 서로 다른 두 원본이 같음 (원본 2개 이상의 위치) |
 | `single-source` | 한쪽에만 있어 그쪽을 따름 |
+| `fitted` | (검토 수준 0~3 전용) 원본이 비었거나 어긋나 근거 자료에 **끼워 맞춘** 해석. `alternatives: [{option, whyNot}]`(검토한 다른 해석, 1개 이상) 필수. 이 결정에 기대는 항목은 `basis:"fitted"` + `decision:"<결정 id>"` |
+
+**검토 수준(`level`, 0~10, 기본 5)** 은 계획서 최상위에 기록된다. 0~3 이면 모든 질문에 `blocking:true` · `blockedReason` · `triedFits:[{option, whyNot}]`(0 은 3개 이상, 1~3 은 2개 이상)가 필요하다. 7 이상이면 모든 요구사항·상태가 task 의 `covers` 에 들어가야 하고, 8 이상이면 비평 결과에 화면별 `coverage:[{surface, sourcesCompared[], result, note?}]`(기획·디자인·계약 원본을 모두 대조)가 있어야 하며, 9 이상이면 요구사항마다 `acceptance` 가 2개 이상이다.
 
 비평 단계는 모든 질문을 원본에 대조해 `questionVerdicts` 를 낸다: `keep`(기준에 맞음) · `demote`(원본이 이미 답함 — `decision` 을 달아 결정으로 내림, 그 질문에 기대던 추론 항목은 같은 근거를 단 원본 근거 항목이 된다) · `drop`(중복·내용 없음, `reason`). 추론 항목이 가리키는 notice 는 drop 할 수 없고, 이전 결정과의 충돌 질문은 내리거나 제거할 수 없다.
 

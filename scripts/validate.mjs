@@ -5,10 +5,11 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { makeResolver } from './lib/locators.mjs';
+import { DEFAULT_LEVEL, tierOf } from './lib/levels.mjs';
 
 const ENUMS = {
   change: ['new', 'changed'],
-  basis: ['source', 'inferred'],
+  basis: ['source', 'inferred', 'fitted'],
   fileStatus: ['existing', 'new'],
   match: ['exact', 'adapt', 'custom'],
   trigger: ['load', 'submit', 'toggle', 'action', 'refresh'],
@@ -22,7 +23,7 @@ const ENUMS = {
   decision: ['follow-existing', 're-review', 'ask-plan', 'ask-design', 'ask-backend', 'decided'],
   questionKind: ['confirm', 'notice'],
   claimType: ['mismatch', 'wrong', 'pattern'],
-  decisionKind: ['answered-by-source', 'sources-agree', 'single-source'],
+  decisionKind: ['answered-by-source', 'sources-agree', 'single-source', 'fitted'],
   inherited: ['kept', 'conflict', 'obsolete'],
   resolved: ['resolved', 'still-open', 'obsolete'],
 };
@@ -48,6 +49,9 @@ export function validate(caseDir, planOverride) {
   // envelope
   if (![1, 2].includes(plan.schemaVersion)) err('envelope', 'schemaVersion 은 1 또는 2');
   const v2 = plan.schemaVersion >= 2;
+  const lv = plan.level ?? DEFAULT_LEVEL;
+  if (!Number.isInteger(lv) || lv < 0 || lv > 10) err('envelope', `level 은 0~10 정수 (${lv})`);
+  const level = tierOf(lv);
   if (plan.kind !== 'WorkPlan') err('envelope', "kind 는 'WorkPlan'");
   if (plan.caseId !== registry.caseId) err('envelope', `caseId 가 sources.json 과 다름 (${plan.caseId})`);
   const expected = registry.sources.map((s) => s.sha256).sort().join();
@@ -79,9 +83,14 @@ export function validate(caseDir, planOverride) {
   list('excluded').forEach((x, i) => { const w = `excluded[${i}]`; if (!x.reason) err(w, 'reason 이 없음'); refs(w, x); });
 
   const inferredNeedsQuestion = [];
+  const fittedNeedsDecision = [];
   const basisCheck = (w, item) => {
     oneOf(w, 'basis', item.basis, 'basis');
     if (item.basis === 'inferred') inferredNeedsQuestion.push([w, item.question]);
+    if (item.basis === 'fitted') {
+      if (level !== 'fit') err(w, `basis:fitted 는 level:fit 에서만 쓴다 (level=${level})`);
+      fittedNeedsDecision.push([w, item.decision]);
+    }
   };
 
   list('requirements').forEach((r, i) => {
@@ -143,6 +152,13 @@ export function validate(caseDir, planOverride) {
       // 질문은 담당자에게 전달되는 두 종류뿐이다 — confirm(원본끼리 다름·한쪽 잘못·패턴 위반 제안) · notice(원본에 정의가 없어 추론·개발 결정한 것의 알림).
       // 원본이 이미 답한 것은 질문이 아니라 decisions 로 기록한다. 두 종류 모두 원본 위치로 뒷받침돼야 한다.
       oneOf(w, 'kind', q.kind, 'questionKind');
+      if (level === 'fit') {
+        // 끼워 맞춤 수준: 질문은 근거 자료로 구현을 성립시킬 해석이 하나도 없을 때만 남는다.
+        if (q.blocking !== true) err(w, 'level:fit 의 질문은 구현이 불가능한 것(blocking:true)만 남긴다 — 나머지는 decisions(kind:fitted)로 끼워 맞춘다');
+        if (!q.blockedReason) err(w, 'blockedReason(왜 어떤 해석으로도 구현할 수 없는지)이 필요함');
+        const tried = Array.isArray(q.triedFits) ? q.triedFits : [];
+        if (tried.length < (lv === 0 ? 3 : 2) || tried.some((t) => !t?.option || !t?.whyNot)) err(w, `triedFits(시도한 끼워 맞춤 ${lv === 0 ? 3 : 2}개 이상, 각 {option, whyNot})가 필요함`);
+      }
       const rs = Array.isArray(q.sourceRefs) ? q.sourceRefs : [];
       if (rs.length === 0) err(w, 'sourceRefs 가 비었음 — 질문을 낳은 원본 위치를 가리켜야 함');
       checkRefs(w, rs);
@@ -173,8 +189,15 @@ export function validate(caseDir, planOverride) {
       checkRefs(w, rs);
       if (d.kind === 'sources-agree' && distinctSources(rs) < 2) err(w, 'sources-agree 는 서로 다른 두 원본의 위치가 필요함');
       if (d.surface) onSurface(w, d.surface);
+      if (d.kind === 'fitted') {
+        if (level !== 'fit') err(w, `fitted 결정은 level:fit 에서만 쓴다 (level=${level})`);
+        const alt = Array.isArray(d.alternatives) ? d.alternatives : [];
+        if (alt.length === 0 || alt.some((a) => !a?.option || !a?.whyNot)) err(w, 'fitted 결정은 alternatives(검토한 다른 해석 1개 이상, 각 {option, whyNot})가 필요함');
+      }
     });
   }
+  const fittedIds = new Set((Array.isArray(plan.decisions) ? plan.decisions : []).filter((d) => d.kind === 'fitted').map((d) => d.id));
+  for (const [w, d] of fittedNeedsDecision) if (!fittedIds.has(d)) err(w, `basis:fitted 인데 decision 이 없거나 fitted 결정이 아님 — ${d}`);
   for (const [w, q] of inferredNeedsQuestion) {
     if (!questionIds.has(q)) err(w, `basis:inferred 인데 question 이 없거나 없는 id — ${q}`);
     else if (v2 && questionKind.get(q) !== 'notice') err(w, `basis:inferred 항목은 kind=notice 질문을 가리켜야 함 — ${q}`);
@@ -202,6 +225,11 @@ export function validate(caseDir, planOverride) {
       if (kind === 'ds-component-edit' && !has((c) => component(c)?.fileStatus === 'existing')) err(w, 'ds-component-edit 는 fileStatus:existing 인 component 를 covers 에 포함해야 함');
     }
   });
+  if (level === 'strict') {
+    for (const r of plan.requirements ?? []) if (!covered.has(r.id)) err(`requirements:${r.id}`, 'level:strict — 어느 task 도 다루지 않음');
+    for (const x of states) if (!covered.has(x.id)) err(`states:${x.id}`, 'level:strict — 어느 task 도 다루지 않음');
+    if (lv >= 9) for (const r of plan.requirements ?? []) if ((r.acceptance ?? []).length < 2) err(`requirements:${r.id}`, 'level:9 이상 — acceptance 는 2개 이상');
+  }
   for (const c of components) if (!covered.has(c.id)) err(`components:${c.id}`, '어느 task 도 다루지 않음');
   for (const b of plan.apiBindings ?? []) if (!covered.has(b.id)) err(`apiBindings:${b.id}`, '어느 task 도 다루지 않음');
 

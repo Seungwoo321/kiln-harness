@@ -17,6 +17,7 @@ import { render } from '../render.mjs';
 import { renderReview } from '../render-review.mjs';
 import { readDecisions } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
+import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STAGES = ['scope', 'interpret', 'critic'];
@@ -28,7 +29,8 @@ const tryJson = (file) => { try { return readJson(file); } catch { return null; 
 export function loadConfig(dir, env = process.env) {
   const base = readJson(join(ROOT, 'kh.config.json'));
   const local = existsSync(join(dir, 'kh.config.json')) ? readJson(join(dir, 'kh.config.json')) : {};
-  const cfg = { limits: { ...base.limits, ...local.limits }, stages: {} };
+  const level = parseLevel(env.KH_LEVEL ?? local.level ?? base.level ?? DEFAULT_LEVEL);
+  const cfg = { level, limits: { ...base.limits, ...local.limits }, stages: {} };
   for (const s of STAGES) {
     const key = s.toUpperCase();
     // runner 가 바뀌면 기본 설정의 model·effort 는 그 runner 의 이름이 아니므로 상속하지 않는다(claude 의 'opus' 를 codex 에 넘기지 않는다).
@@ -89,13 +91,13 @@ export function scopeGate(dir, registry, lineage = null) {
   return { violations: out, value: scope };
 }
 
-const ENVELOPE = ['schemaVersion', 'kind', 'caseId', 'inputDigests', 'findings'];
-export function assemblePlan(registry, draft, findings = []) {
+const ENVELOPE = ['schemaVersion', 'kind', 'caseId', 'inputDigests', 'findings', 'level'];
+export function assemblePlan(registry, draft, findings = [], level = DEFAULT_LEVEL) {
   const body = Object.fromEntries(Object.entries(draft).filter(([k]) => !ENVELOPE.includes(k)));
-  return { schemaVersion: 2, kind: 'WorkPlan', caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), ...body, findings };
+  return { schemaVersion: 2, kind: 'WorkPlan', caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), level, ...body, findings };
 }
 
-export function interpretGate(dir, registry, scope) {
+export function interpretGate(dir, registry, scope, level = DEFAULT_LEVEL) {
   const draft = tryJson(join(dir, 'stages', 'workplan.draft.json'));
   if (!draft) return { violations: ['stages/workplan.draft.json 이 없거나 JSON 이 아님'] };
   const out = [];
@@ -103,7 +105,7 @@ export function interpretGate(dir, registry, scope) {
   const got = new Set((draft.surfaces ?? []).map((s) => s.id));
   for (const id of want) if (!got.has(id)) out.push(`범위의 화면이 계획서에 없음 — ${id}`);
   for (const id of got) if (!want.has(id)) out.push(`범위에 없는 화면을 추가함 — ${id}`);
-  const plan = assemblePlan(registry, draft);
+  const plan = assemblePlan(registry, draft, [], level);
   out.push(...validate(dir, plan));
   return { violations: out, value: plan };
 }
@@ -122,7 +124,7 @@ export function applyQuestionVerdicts(plan, demoted, dropped) {
       if (item.basis === 'inferred' && demoted.has(item.question)) {
         item.sourceRefs = dedupe([...(item.sourceRefs ?? []), ...demoted.get(item.question).sourceRefs]);
         item.decision = `D-${item.question}`;
-        item.basis = 'source';
+        item.basis = demoted.get(item.question).kind === 'fitted' ? 'fitted' : 'source';
         delete item.question;
       }
     }
@@ -174,7 +176,20 @@ export function criticGate(dir, registry, plan) {
 
   const applied = applyQuestionVerdicts(plan, demoted, dropped);
   const gone = new Set([...demoted.keys(), ...dropped]);
-  const merged = { ...applied, findings: crit.findings.filter((f) => !gone.has(f.target)) };
+  if ((plan.level ?? DEFAULT_LEVEL) >= 8) {
+    // 체계 검증: 화면마다 어떤 원본끼리 대조했는지 남아야 한다 — 대조 없이 통과시키지 않는다.
+    const cov = Array.isArray(crit.coverage) ? crit.coverage : [];
+    const need = registry.sources.filter((x) => ['plan', 'design', 'contract'].includes(x.role)).map((x) => x.id);
+    for (const sf of plan.surfaces ?? []) {
+      const c = cov.find((x) => x.surface === sf.id);
+      if (!c) { out.push(`coverage: 화면 ${sf.id} 의 대조 기록이 없음`); continue; }
+      const got = new Set(Array.isArray(c.sourcesCompared) ? c.sourcesCompared : []);
+      for (const id of need) if (!got.has(id)) out.push(`coverage: 화면 ${sf.id} 에서 ${id} 와 대조하지 않음`);
+      if (!c.result) out.push(`coverage: 화면 ${sf.id} 의 result 가 없음`);
+    }
+    if (out.length) return { violations: out };
+  }
+  const merged = { ...applied, findings: crit.findings.filter((f) => !gone.has(f.target)), ...((plan.level ?? DEFAULT_LEVEL) >= 8 ? { coverage: crit.coverage } : {}) };
   out.push(...validate(dir, merged)); // 내려온 decision 의 근거·남긴 질문의 기준(두 원본 위치·증거·찾아본 범위)은 여기서 결정적으로 검사된다
   return { violations: out, value: merged, removed: [...gone] };
 }
@@ -201,7 +216,7 @@ function lineageBlock(stage, lin) {
 export function buildPrompt(stage, ctx) {
   const head = `사례 폴더(작업 디렉터리)에서 작업한다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
-  const tail = lin + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
+  const tail = lin + levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
   if (stage === 'scope') return `${head}\n결과: stages/scope.json${tail}`;
   if (stage === 'interpret') {
     const decisions = ctx.decisions.length ? `\n\n[사용자 결정 — 확정값]\n${ctx.decisions.map((d) => `- ${d.id} (${d.stance}): ${d.note}`).join('\n')}` : '';
@@ -272,10 +287,10 @@ function snapshotFailed(dir, loop, violations) {
 
 const discard = (dir) => { for (const f of DERIVED) rmSync(join(dir, f), { recursive: true, force: true }); };
 
-function upToDate(dir, registry, decisionsDigest) {
+function upToDate(dir, registry, decisionsDigest, level) {
   const status = tryJson(join(dir, 'run-status.json'));
   const plan = tryJson(join(dir, 'workplan.json'));
-  if (!status || !plan || status.result !== 'passed' || status.decisionsDigest !== decisionsDigest) return false;
+  if (!status || !plan || status.result !== 'passed' || status.decisionsDigest !== decisionsDigest || (status.level ?? DEFAULT_LEVEL) !== level) return false;
   if (plan.schemaVersion < 2 || !Array.isArray(plan.findings)) return false;
   return [...plan.inputDigests].sort().join() === registry.sources.map((s) => s.sha256).sort().join() && validate(dir).length === 0;
 }
@@ -288,6 +303,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const dir = resolve(rawDir);
   const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => process.stdout.write(`[${s}] ${m}\n`)) };
   const cfg = loadConfig(dir, opts.env ?? process.env);
+  const level = opts.level !== undefined ? parseLevel(opts.level) : cfg.level;
   const limits = { ...cfg.limits, ...(opts.stageAttempts ? { stageAttempts: opts.stageAttempts } : {}), ...(opts.loopAttempts ? { loopAttempts: opts.loopAttempts } : {}) };
 
   const registry = register(dir);
@@ -308,14 +324,17 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const prev = tryJson(join(dir, 'run-status.json'));
   const prevPlan = tryJson(join(dir, 'workplan.json'));
 
-  if (!opts.force && upToDate(dir, registry, decisionsDigest)) {
-    deps.log('S3·S4·S6', '원본·결정이 그대로이고 현재 작업계획이 검증을 통과한다 — 다시 해석하지 않는다');
+  if (!opts.force && upToDate(dir, registry, decisionsDigest, level)) {
+    deps.log('S3·S4·S6', '원본·결정·검토 수준이 그대로이고 현재 작업계획이 검증을 통과한다 — 다시 해석하지 않는다');
     render(dir); renderReview(dir);
     return { ok: true, skipped: true };
   }
 
   // 결정만 바뀌었으면(원본 동일) 범위(scope.json)와 기존 계획서를 이어받아 해당 항목만 다시 해석한다.
   const sameSources = prev?.sourcesDigest === registry.digest;
+  const levelChanged = prev && (prev.level ?? DEFAULT_LEVEL) !== level;
+  if (levelChanged) deps.log('LEVEL', `검토 수준이 ${prev.level ?? DEFAULT_LEVEL} → ${level} 로 바뀌어 계획서를 처음부터 다시 해석한다(범위는 이어받는다)`);
+  deps.log('LEVEL', `검토 수준 ${level}/10`);
   const reuseScope = !opts.force && sameSources && existsSync(join(dir, 'scope.json')) && prevPlan?.schemaVersion >= 2;
   const baseScope = reuseScope ? readJson(join(dir, 'scope.json')) : null;
 
@@ -327,14 +346,14 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   for (let loop = 1; loop <= limits.loopAttempts; loop += 1) {
     deps.log('LOOP', `전체 시도 ${loop}/${limits.loopAttempts}`);
     const useBase = loop === 1 && reuseScope;
-    const basePlan = useBase ? prevPlan : null;
+    const basePlan = useBase && !levelChanged ? prevPlan : null;
     if (!useBase) { discard(dir); chain.ids = {}; chain.started = {}; } else { rmSync(join(dir, 'stages'), { recursive: true, force: true }); }
     mkdirSync(join(dir, 'stages'), { recursive: true });
-    writeStatus(dir, { stage: 'running', loop, result: 'running', sourcesDigest: registry.digest, decisionsDigest, stages: stats });
+    writeStatus(dir, { stage: 'running', loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats });
 
     const needInput = (name, r) => {
       stats[name].result = 'needs-input';
-      writeStatus(dir, { stage: name, loop, result: 'needs-input', sourcesDigest: registry.digest, decisionsDigest, stages: stats, usage: usage(), missingInputs: r.needsInput });
+      writeStatus(dir, { stage: name, loop, result: 'needs-input', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats, usage: usage(), missingInputs: r.needsInput });
       deps.log('INPUT', `입력 보강이 필요해 멈춘다 — inputs.json 에 자료를 더하고 다시 실행한다:\n  · ${r.needsInput.join('\n  · ')}`);
       return { ok: false, needsInput: r.needsInput };
     };
@@ -345,9 +364,9 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
       deps.log('LOOP', `${stage} 단계가 ${r.attempts}회 안에 통과하지 못했다 — 파생 산출물을 지우고 처음부터 다시 시작한다`);
     };
     const stage = (name, extra) => {
-      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
+      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
       stats[name].result = r.ok ? 'passed' : 'failed'; stats[name].attempts = r.attempts;
-      writeStatus(dir, { stage: name, loop, result: 'running', sourcesDigest: registry.digest, decisionsDigest, stages: stats }); // 단계마다 기록 — 중단돼도 어디까지 갔는지 남는다
+      writeStatus(dir, { stage: name, loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats }); // 단계마다 기록 — 중단돼도 어디까지 갔는지 남는다
       return r;
     };
 
@@ -361,7 +380,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
       scope = r.value; stats.scope.result = 'passed';
     }
     // S4 (+S5 validate 는 게이트 안에서)
-    const ri = stage('interpret', { gate: () => interpretGate(dir, registry, scope), outFile: 'workplan.draft.json', ctx: {} });
+    const ri = stage('interpret', { gate: () => interpretGate(dir, registry, scope, level), outFile: 'workplan.draft.json', ctx: {} });
     if (ri.needsInput) return needInput('interpret', ri);
     if (!ri.ok) { fail('interpret', ri); continue; }
     stats.interpret.result = 'passed';
@@ -378,13 +397,13 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     writeFileSync(join(dir, 'workplan.json'), `${JSON.stringify(plan, null, 2)}\n`);
     writeFileSync(join(dir, 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`);
     render(dir); renderReview(dir);
-    writeStatus(dir, { stage: 'done', loop, result: 'passed', sourcesDigest: registry.digest, decisionsDigest, workplanDigest: sha256(canonical(plan)), stages: stats, usage: usage(), changedIds: changedIds(prevPlan, plan), removedQuestions: rc.removed });
+    writeStatus(dir, { stage: 'done', loop, result: 'passed', sourcesDigest: registry.digest, level, decisionsDigest, workplanDigest: sha256(canonical(plan)), stages: stats, usage: usage(), changedIds: changedIds(prevPlan, plan), removedQuestions: rc.removed });
     deps.log('S7', `${join(dir, 'review.html')}`);
     return { ok: true, loop, plan };
   }
 
   discard(dir);
-  writeStatus(dir, { stage: 'failed', loop: limits.loopAttempts, result: 'failed', sourcesDigest: registry.digest, decisionsDigest, stages: stats, usage: usage(), violations: lastViolations });
+  writeStatus(dir, { stage: 'failed', loop: limits.loopAttempts, result: 'failed', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats, usage: usage(), violations: lastViolations });
   deps.log('LOOP', `전체 ${limits.loopAttempts}회 안에 통과하지 못했다 — 파생 산출물을 삭제했다(원본·결정은 보존). 마지막 시도는 failed/ 에 있다`);
   return { ok: false, violations: lastViolations };
 }
