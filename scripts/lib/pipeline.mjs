@@ -17,7 +17,7 @@ import { render } from '../render.mjs';
 import { renderReview } from '../render-review.mjs';
 import { readDecisions } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
-import { createLive, createTicker } from './live.mjs';
+import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -305,7 +305,7 @@ export const changedIds = (before, after) => { const a = itemIds(before); const 
 export function runPipeline(rawDir, opts = {}, injected = {}) {
   const dir = resolve(rawDir);
   const live = createLive();
-  const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => live.print(`[${s}] ${m}`)) };
+  const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => live.print(logLine(live.color, s, m))) };
   const cfg = loadConfig(dir, opts.env ?? process.env);
   const level = opts.level !== undefined ? parseLevel(opts.level) : cfg.level;
   const limits = { ...cfg.limits, ...(opts.stageAttempts ? { stageAttempts: opts.stageAttempts } : {}), ...(opts.loopAttempts ? { loopAttempts: opts.loopAttempts } : {}) };

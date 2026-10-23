@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fit, mmss, createLive, createActivity, createTicker } from './lib/live.mjs';
+import { fit, mmss, createLive, createActivity, createTicker, colorOn, paintLine, elapsedStyle, logLine } from './lib/live.mjs';
 
 const ev = (content, out = 0) => `${JSON.stringify({ type: 'assistant', message: { content, usage: { output_tokens: out } } })}\n`;
 
@@ -49,4 +49,22 @@ test('TTY 에서는 같은 자리를 지우고 다시 그리며, 영구 로그�
   live.draw(['a', 'b']); live.draw(['c']); live.print('[x] done');
   assert.ok(out.some((s) => s.includes('\x1b[2A')) && out.some((s) => s.includes('\x1b[1A')));
   assert.equal(out.at(-1), '[x] done\n');
+});
+
+test('색은 TTY 에서만 켜고 NO_COLOR 면 끈다. 꺼지면 색 코드가 없다', () => {
+  assert.equal(colorOn({ isTTY: true }, {}), true);
+  assert.equal(colorOn({ isTTY: false }, {}), false);
+  assert.equal(colorOn({ isTTY: true }, { NO_COLOR: '1' }), false);
+  assert.equal(colorOn({ isTTY: false }, { FORCE_COLOR: '1' }), true);
+  assert.equal(paintLine(false, [['abc', 'red'], ['def', 'bold']], 40), 'abcdef');
+  assert.equal(logLine(false, 'S1', '통과 (1회째)'), '[S1] 통과 (1회째)');
+});
+
+test('색을 입혀도 보이는 폭은 cols 를 넘지 않고, 경과 시간은 길수록 경고색이다', () => {
+  const strip = (x) => x.replace(/\x1b\[[0-9;]*m/g, '');
+  const line = paintLine(true, [['가나다라마바사아자차', 'green'], ['abcdefghij', 'red']], 14);
+  assert.ok(line.includes('\x1b[32m'));
+  assert.ok([...strip(line)].reduce((n, ch) => n + (ch.codePointAt(0) >= 0xac00 ? 2 : 1), 0) <= 13);
+  assert.deepEqual([elapsedStyle(60), elapsedStyle(400), elapsedStyle(1000)], ['green', 'yellow', 'red']);
+  assert.ok(logLine(true, 'S3', '에이전트 실행 실패: x').includes('\x1b[31m'));
 });

@@ -12,12 +12,38 @@ export function fit(s, cols) {
 export const mmss = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 const kfmt = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
-export function createLive(stream = process.stdout) {
+// ANSI 색상 — TTY 이고 NO_COLOR 가 없을 때만 켠다(FORCE_COLOR 가 있으면 TTY 가 아니어도 켠다). 꺼지면 글자만 낸다.
+const CODES = { bold: '1', dim: '2', red: '31', green: '32', yellow: '33', blue: '34', magenta: '35', cyan: '36' };
+export const colorOn = (stream, env = process.env) => (env.NO_COLOR ? false : Boolean(env.FORCE_COLOR) || Boolean(stream.isTTY));
+export const paintText = (on, style, text) => (on && style ? `${style.split(' ').map((k) => `\x1b[${CODES[k]}m`).join('')}${text}\x1b[0m` : text);
+// [[글자, 스타일], …] 을 보이는 폭 cols 안에서 자르고 색을 입힌다. 폭 계산은 색 코드를 빼고 한다.
+export function paintLine(on, segs, cols) {
+  let left = cols - 1; let out = '';
+  for (const [text, style] of segs) {
+    if (left <= 0) break;
+    const t = fit(text, left + 1); const w = [...t].reduce((n, ch) => n + (wide(ch) ? 2 : 1), 0);
+    out += paintText(on, style, t); left -= w;
+    if (t.endsWith('…') && t !== String(text).replace(/\s+/g, ' ')) break;
+  }
+  return out;
+}
+// 경과 시간 색: 5분 미만 초록, 15분 미만 노랑, 그 이상 빨강 — 오래 걸리는 시도를 눈에 띄게 한다.
+export const elapsedStyle = (sec) => (sec < 300 ? 'green' : sec < 900 ? 'yellow' : 'red');
+const TOOL_STYLE = { Read: 'blue', Grep: 'blue', Glob: 'blue', Bash: 'yellow', Write: 'green', Edit: 'green' };
+// 영구 로그 한 줄: [태그] 를 굵게 입히고, 결과를 뜻하는 말은 색을 달리한다.
+export function logLine(on, tag, msg) {
+  const style = /실패|위반|멈춤|수정 감지|통과하지 못/.test(msg) ? 'red' : /^통과|reused|완료/.test(msg) ? 'green' : /보강 필요|바뀌어/.test(msg) ? 'yellow' : null;
+  return `${paintText(on, 'bold cyan', `[${tag}]`)} ${paintText(on, style, msg)}`;
+}
+
+export function createLive(stream = process.stdout, env = process.env) {
   const tty = Boolean(stream.isTTY);
+  const color = colorOn(stream, env);
   let drawn = 0;
   const clear = () => { if (tty && drawn) { stream.write(`\x1b[${drawn}A\x1b[0J`); drawn = 0; } };
   return {
     tty,
+    color,
     cols: () => stream.columns || 100,
     print(msg) { clear(); stream.write(`${msg}\n`); },
     draw(lines) { if (!tty) return; clear(); stream.write(`${lines.join('\n')}\n`); drawn = lines.length; },
@@ -86,14 +112,19 @@ export function createTicker({ live, root, overview }) {
         return;
       }
       const cols = live.cols();
-      const mark = { passed: '✓', reused: '✓', running: '▶', failed: '✗', 'needs-input': '!', pending: '·' };
-      const flow = o.stages.map(([n, r]) => `${n}${n === t.stage ? '▶' : mark[r] ?? '·'}`).join('  ');
+      const on = live.color;
+      const mark = { passed: ['✓', 'green'], reused: ['✓', 'green'], running: ['▶', 'cyan bold'], failed: ['✗', 'red bold'], 'needs-input': ['!', 'yellow bold'], pending: ['·', 'dim'] };
+      const flow = o.stages.flatMap(([n, r], i) => {
+        const [m, st] = n === t.stage ? ['▶', 'cyan bold'] : mark[r] ?? ['·', 'dim'];
+        return [...(i ? [['  ', null]] : []), [n, n === t.stage ? 'bold' : null], [m, st]];
+      });
       const recent = st.tools.length ? st.tools : [st.text || '시작하는 중…'];
+      const toolSegs = (x) => { const [name, ...rest] = x.split(' '); return TOOL_STYLE[name] ? [[name, TOOL_STYLE[name]], [` ${rest.join(' ')}`, null]] : [[x, null]]; };
       live.draw([
-        fit(`━ 검토 수준 ${o.level}/10 · 전체 ${mmss((Date.now() - o.startedAt) / 1000)} 경과 · ${flow}`, cols),
-        fit(`▶ ${head} · ${mmss(t.elapsedSec)} 경과 · 도구 ${st.toolCount}회${st.outTokens ? ` · 출력 ${kfmt(st.outTokens)} 토큰` : ''}`, cols),
-        ...recent.map((x, i) => fit(`   ${i === 0 ? '최근' : '    '} ${x}`, cols)),
-        fit(`   누적 호출 ${o.totals.calls} · 토큰 ${kfmt(o.totals.tokens)} · $${o.totals.costUsd.toFixed(2)}`, cols),
+        paintLine(on, [['━ ', 'dim'], [`검토 수준 ${o.level}/10`, 'bold'], [' · 전체 ', 'dim'], [mmss((Date.now() - o.startedAt) / 1000), 'bold'], [' 경과 · ', 'dim'], ...flow], cols),
+        paintLine(on, [['▶ ', 'cyan bold'], [t.stage, 'cyan bold'], [` 시도 ${t.attempt}/${t.max}`, 'bold'], [` · ${t.cfg.runner}/${t.cfg.model ?? '기본'}${t.cfg.effort ? `/${t.cfg.effort}` : ''}`, 'magenta'], [' · ', 'dim'], [mmss(t.elapsedSec), `${elapsedStyle(t.elapsedSec)} bold`], [' 경과', 'dim'], [` · 도구 ${st.toolCount}회`, null], ...(st.outTokens ? [[` · 출력 ${kfmt(st.outTokens)} 토큰`, 'dim']] : [])], cols),
+        ...recent.map((x, i) => paintLine(on, [[`   ${i === 0 ? '최근' : '    '} `, 'dim'], ...toolSegs(x)], cols)),
+        paintLine(on, [['   누적 호출 ', 'dim'], [String(o.totals.calls), 'bold'], [' · 토큰 ', 'dim'], [kfmt(o.totals.tokens), 'bold'], [' · ', 'dim'], [`$${o.totals.costUsd.toFixed(2)}`, 'yellow bold']], cols),
       ]);
     },
     end() { live.clear(); },
