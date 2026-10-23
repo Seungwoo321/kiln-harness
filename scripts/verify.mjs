@@ -53,9 +53,10 @@ export async function verify(rawDir, options, injected = {}) {
   const tolerances = { ...defaultConfig.conformance?.tolerances, ...localConfig.conformance?.tolerances };
   const scratchRoot = join(dir, '.render'); mkdirSync(scratchRoot, { recursive: true });
   const scratch = mkdtempSync(join(scratchRoot, 'verify-'));
+  const cleanup = () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot, { recursive: true }); };
   let browser;
   try {
-    browser = await launchBrowser(chrome, scratch, () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot); });
+    browser = await launchBrowser(chrome, scratch, cleanup);
     const dom = await capturePage(browser, options.url, { theme: options.theme ?? specs[0].render.theme, ...specs[0].render.viewport });
     const implementation = seal({ schemaVersion: 1, kind: 'ImplementationSpec', render: dom.render, elements: componentCandidates(dom.elements, baseline), interactions: dom.interactions });
     const inspected = inspectCode(options.code, specs);
@@ -65,6 +66,7 @@ export async function verify(rawDir, options, injected = {}) {
     writeJson(join(dir, 'conformance-facts.json'), facts);
     // 판단을 시작하기 전에 브라우저를 종료한다.
     await browser.close(); browser = null;
+    cleanup();
     let judgmentExit;
     if (injected.judge) await injected.judge(dir, facts);
     else {
@@ -81,8 +83,7 @@ export async function verify(rawDir, options, injected = {}) {
     throw e;
   } finally {
     await browser?.close();
-    rmSync(scratch, { recursive: true, force: true });
-    if (!readdirSync(scratchRoot).length) rmSync(scratchRoot, { recursive: true });
+    cleanup();
   }
 }
 

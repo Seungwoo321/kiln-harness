@@ -82,7 +82,7 @@ export async function designSpec(dir, options = {}) {
   let browser;
   const servers = [];
   try {
-    browser = await launchBrowser(chrome, scratch, () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot); });
+    browser = await launchBrowser(chrome, scratch, () => { rmSync(scratch, { recursive: true, force: true }); if (existsSync(scratchRoot) && !readdirSync(scratchRoot).length) rmSync(scratchRoot, { recursive: true }); });
     const roots = new Map();
     for (const s of registry.sources.filter(s => s.role === 'design' && s.kind === 'code')) {
       roots.set(s.id, { repo: s.repo, commit: s.commit, paths: s.paths, inputDigest: sha256(canonical({ commit: s.commit, tree: s.sha256 })) });

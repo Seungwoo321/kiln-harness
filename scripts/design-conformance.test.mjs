@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { register } from './register.mjs';
@@ -106,6 +106,7 @@ test('렌더 증거는 단일 펼침·상대 좌표·클래스 size·토큰·테
 
 // 합성 fixture의 정답을 반환하는 가짜 판정자. 제품의 판정 로직이 아니다.
 function fixtureJudge(dir, facts) {
+  assert.equal(existsSync(join(dir, '.render')), false, '판정 세션 전에 렌더 자원을 정리해야 함');
   return runConformance(dir, {env:{}}, {log:()=>{},runAgent:spec=>{
     const rows=facts.facts.map((f,i)=>{
       const design=facts.designs.find(d=>d.sourceId===f.sourceId)?.elements.find(e=>e.id===f.element);
