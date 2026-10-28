@@ -229,7 +229,7 @@ function lineageBlock(stage, lin) {
 
 export function buildPrompt(stage, ctx) {
   if (stage === 'conformance') return `conformance-facts.json의 사실만 근거로 구현 적합성을 판단한다. 모든 fact id를 정확히 한 번 판정한다. 결과는 stages/conformance.json이다. 형식은 역할 파일을 따른다. 컴포넌트 대응·수용 여부를 직접 판단하고 수집 스크립트의 후보나 오차를 정답으로 취급하지 않는다.${feedbackBlock('이전 시도의 형식 위반', ctx.feedback)}`;
-  const head = `사례 폴더(작업 디렉터리)에서 작업한다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
+  const head = `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다(다른 폴더는 절대경로·git -C 로 읽는다) — 바뀌면 결과 파일 쓰기가 거부된다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
   const design = ctx.catalog?.designSpec;
   const evidence = design ? `\n\n[렌더 증거]\ndesign-spec: ${design.status}${design.reason ? ` (${design.reason})` : ''}. ${JSON.stringify(design.sources ?? [])}\n${JSON.stringify(design.summary ?? [])}\n전체 요소·계산 스타일: design-spec/<sourceId>.json. 컴포넌트 기준: component-baseline.json. 기존 UI 사용례: existing-patterns.json (${ctx.catalog.existingPatterns ?? 0}개, 적합성은 코드로 확인). 출처별 수용 정책과 v3 시안 규격을 적용한다.` : '';
@@ -262,6 +262,8 @@ function sessionFor(cfg, chain) {
   return { mode: 'new', id: cfg.runner === 'claude' ? randomUUID() : undefined };
 }
 
+const WRITE_DENIED = /쓰기\s*(권한|가\s*거부)|Write\s*도구|write\s*permission|permission.*denied|denied.*write/i;
+
 export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, outFile, stat, chain }) {
   let feedback = [];
   for (let n = 1; n <= limits.stageAttempts; n += 1) {
@@ -280,6 +282,12 @@ export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, ou
     if (!res.ok) { feedback = [`에이전트 실행 실패: ${res.error}`]; deps.log(name, feedback[0]); continue; }
     const missing = Array.isArray(res.status?.missingInputs) ? res.status.missingInputs.filter(Boolean) : [];
     // 필요한 자료가 입력에 없다는 알림은 재시도로 풀리지 않는다 — 입력 보강을 요청하고 멈춘다.
+    // 쓰기 권한 거부는 입력 부족이 아니라 실행 환경 문제다 — 재시도로 풀리므로 입력 보강으로 분류하지 않는다.
+    const denied = missing.filter((m) => WRITE_DENIED.test(m));
+    if (res.status?.status === 'blocked' && denied.length) {
+      feedback = [`쓰기 거부: 결과 파일은 절대경로 ${join(dir, 'stages', outFile ?? '')} 에 Write 도구로 쓴다. Bash 로 cd 하지 않는다(작업 디렉터리가 바뀌면 쓰기가 거부된다).`];
+      deps.log(name, `쓰기 거부 — 재시도: ${denied.join(' / ')}`); continue;
+    }
     if (res.status?.status === 'blocked' && missing.length) { deps.log(name, `입력 보강 필요: ${missing.join(' / ')}`); return { ok: false, attempts: n, needsInput: missing, violations: [] }; }
     if (res.status?.status === 'blocked') { feedback = [`에이전트가 멈춤: ${res.status.message}`]; deps.log(name, feedback[0]); continue; }
     const intact = sourcesIntact(registry);

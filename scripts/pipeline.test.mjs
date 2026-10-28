@@ -152,6 +152,8 @@ test('러너 명령: claude 와 codex 는 같은 입력으로 각자의 플래�
   assert.ok(c.args.includes('--json-schema') && c.args.includes('--no-session-persistence') && c.args.includes('--strict-mcp-config'));
   assert.equal(c.args[c.args.indexOf('--model') + 1], 'm1'); assert.equal(c.args[c.args.indexOf('--effort') + 1], 'high');
   assert.ok(c.args.includes('Write(stages/**)')); assert.ok(!c.args.includes('--dangerously-skip-permissions'));
+  // 절대경로 규칙: 에이전트가 cd 해도 사례 폴더 쓰기 허용
+  assert.ok(c.args.includes('Write(//c/stages/**)') && c.args.includes('Edit(//c/stages/**)'));
   assert.ok(c.args.includes('--add-dir'));
   assert.ok(c.args.includes('Bash(git -C /r show:*)') && c.args.includes('Bash(git -C /r grep:*)'));
   assert.ok(!c.args.some((a) => /git -C \*|commit|push|checkout/.test(a)));
@@ -274,6 +276,25 @@ test('참조 카탈로그는 모든 단계의 프롬프트에 들어가고, 없�
   const { dir } = fixture(); const agent = fakeAgent(); go(dir, agent);
   for (const c of agent.calls) assert.ok(c.prompt.includes('[참조 카탈로그') && c.prompt.includes('missingInputs') && c.prompt.includes('plan1 (plan, plan-html)'));
   assert.ok(agent.calls[0].prompt.includes('계약') && agent.calls[0].prompt.includes('없는 자료'));
+});
+
+test('쓰기 권한 거부 보고는 입력 보강이 아니라 재시도로 처리한다', () => {
+  const { dir } = fixture();
+  const agent = fakeAgent({ interpret: (n) => (n === 1 ? 'denied' : undefined) });
+  const run = agent.run;
+  // 첫 해석 시도만 쓰기 거부를 보고하게 감싼다(가짜 에이전트의 'needs-input' 분기와 같은 형태).
+  const wrapped = (spec) => {
+    const r = run(spec);
+    if (spec.prompt.includes('workplan.draft') && agent.calls.filter((c) => c.stage === 'interpret').length === 1) {
+      return { ok: true, status: { status: 'blocked', message: '쓰기 거부', missingInputs: ['workplan.draft.json 쓰기 권한 — Write 도구가 거부됨'] }, tokens: 1, seconds: 0, costUsd: 0 };
+    }
+    return r;
+  };
+  const r = runPipeline(dir, { env: {} }, { runAgent: wrapped, log: () => {} });
+  assert.equal(r.ok, true); // 입력 보강으로 멈추지 않고 재시도해 통과한다
+  const interprets = agent.calls.filter((c) => c.stage === 'interpret');
+  assert.equal(interprets.length, 2);
+  assert.ok(interprets[1].prompt.includes('쓰기 거부') && interprets[1].prompt.includes(join(dir, 'stages')) && interprets[1].prompt.includes('cd'));
 });
 
 test('필요한 자료가 입력에 없다고 알리면 재시도하지 않고 입력 보강을 요청한다', () => {

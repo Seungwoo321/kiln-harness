@@ -3,7 +3,7 @@
 // 에이전트는 파일을 쓰고(결과물), 최종 응답은 작은 상태 JSON 이다. 결과물의 합격 여부는 스크립트(게이트)가 판정한다.
 import { spawn, execFileSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync, accessSync, openSync, closeSync, constants } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export const STATUS_SCHEMA = {
   type: 'object',
@@ -32,8 +32,11 @@ const CLAUDE_TOOLS = 'Read,Grep,Glob,Write,Edit,Bash';
 // 카탈로그가 알려 주는 읽기 명령은 `git -C <repo> show ...` 형태라 `git show:*` 로는 매치되지 않는다(dontAsk 에서 조용히 거부된다).
 // 와일드카드(`git -C * show *`)는 `git -C x commit -m "show"` 까지 매치하므로, 등록된 저장소 경로를 규칙에 직접 박는다.
 export const gitReadRules = (repos = []) => repos.flatMap((r) => ['show', 'ls-tree', 'grep', 'cat-file'].map((c) => `Bash(git -C ${r} ${c}:*)`));
-export const claudeAllowed = (extraBash = []) => [
-  'Read', 'Grep', 'Glob', 'Write(stages/**)', 'Edit(stages/**)',
+// 쓰기 규칙은 상대경로(stages/**)가 작업 디렉터리 기준이라, 에이전트가 Bash 에서 `cd` 로 디렉터리를 옮기면 사례 폴더 쓰기가 거부된다(실측: 플러그인 폴더로 cd 한 뒤 workplan.draft.json 쓰기 거부).
+// 절대경로 규칙(`//` 접두 = 파일시스템 루트 기준)을 함께 둬 작업 디렉터리가 바뀌어도 사례 폴더 stages/ 쓰기는 허용한다.
+export const stagesWriteRules = (cwd) => (cwd ? [`Write(//${resolve(cwd).replace(/^\//, '')}/stages/**)`, `Edit(//${resolve(cwd).replace(/^\//, '')}/stages/**)`] : []);
+export const claudeAllowed = (extraBash = [], cwd = '') => [
+  'Read', 'Grep', 'Glob', 'Write(stages/**)', 'Edit(stages/**)', ...stagesWriteRules(cwd),
   'Bash(git show:*)', 'Bash(git ls-tree:*)', 'Bash(git grep:*)', 'Bash(git cat-file:*)', 'Bash(sed:*)', 'Bash(head:*)', 'Bash(wc:*)', 'Bash(ls:*)',
   ...extraBash,
 ];
@@ -49,7 +52,7 @@ export function buildCommand(spec) {
       '--json-schema', JSON.stringify(STATUS_SCHEMA), '--append-system-prompt', role,
       // 앰비언트 컨텍스트(전역 규칙·훅·스킬·MCP)를 끊는다 — 실측 약 2.8만 → 3천 토큰.
       '--setting-sources', 'project', '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
-      '--exclude-dynamic-system-prompt-sections', '--permission-mode', 'dontAsk', '--tools', CLAUDE_TOOLS, '--allowedTools', ...claudeAllowed(gitReadRules(gitRepos))];
+      '--exclude-dynamic-system-prompt-sections', '--permission-mode', 'dontAsk', '--tools', CLAUDE_TOOLS, '--allowedTools', ...claudeAllowed(gitReadRules(gitRepos), cwd)];
     if (model) args.push('--model', model);
     if (effort) args.push('--effort', effort);
     for (const d of addDirs) args.push('--add-dir', d);
