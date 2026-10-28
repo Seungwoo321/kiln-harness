@@ -9,7 +9,7 @@
       "name": "kiln-harness",
       "source": "./",
       "description": "기획·디자인 산출물 → 개발 작업계획 변환 하네스 (입력 정의 스킬 + 터미널 파이프라인)",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "homepage": "https://github.com/Seungwoo321/kiln-harness"
     }
   ]
