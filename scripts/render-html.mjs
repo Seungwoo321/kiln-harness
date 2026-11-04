@@ -1,5 +1,6 @@
 // S6 render (HTML) — workplan.json 을 단일 HTML 로 렌더한다. 외부 리소스 없이 열린다.
 import { canonical, sha256 } from './register.mjs';
+import { dsMatchLabel } from './lib/labels.mjs';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const code = (v) => `<code>${esc(v)}</code>`;
@@ -19,7 +20,7 @@ export function renderHtml(p) {
     const walk = (parent) => {
       const kids = nodes.filter((c) => (c.parent ?? null) === parent);
       if (kids.length === 0) return '';
-      return `<ul class="tree">${kids.map((c) => `<li><div class="node"><b>${esc(c.name)}</b> ${pill(c.fileStatus, c.fileStatus === 'new' ? 'info' : 'mute')} ${pill(c.ds.match, MATCH[c.ds.match])}<div class="file">${code(c.file)}</div><div class="ds">DS: ${esc(c.ds.component ?? '—')}</div><div class="why">${esc(c.ds.reason)}</div></div>${walk(c.id)}</li>`).join('')}</ul>`;
+      return `<ul class="tree">${kids.map((c) => `<li><div class="node"><b>${esc(c.name)}</b> ${pill(c.fileStatus, c.fileStatus === 'new' ? 'info' : 'mute')} ${pill(dsMatchLabel(c.ds.match), MATCH[c.ds.match])}<div class="file">${code(c.file)}</div><div class="ds">DS: ${esc(c.ds.component ?? '—')}</div><div class="why">${esc(c.ds.reason)}</div></div>${walk(c.id)}</li>`).join('')}</ul>`;
     };
     return walk(null) || '<p class="empty">없음</p>';
   };

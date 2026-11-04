@@ -65,6 +65,7 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 - 파일 원본(`plan-html`·`plan-doc`·`design-html`·`design-asset`·`context-doc`)은 경로로, 코드 레포(`code`)는 `repo`·`ref`·`paths` 로 등록한다(커밋으로 고정). 역할은 `plan`·`design`·`contract`·`implementation`·`context`. 백엔드 레포는 `code` + `implementation` 으로 하나 더 등록한다.
 - 없는 자료는 등록하지 않는다. `references.json` 이 역할별 부재를 알려 주고, 에이전트는 없는 자료(예: API 계약)에 대해 사실을 단정하지 않는다.
 - 에이전트는 카탈로그에 있는 자료만 근거로 고른다(`sourceRefs` 의 `sourceId`). 판단에 꼭 필요한 자료가 없으면 지어내지 않고 `missingInputs` 로 알린다 — 파이프라인은 재시도하지 않고 `run-status.json` 에 `result:"needs-input"` 과 목록을 남기고 종료 코드 3 으로 끝난다. `inputs.json` 에 자료를 더하고 다시 실행한다.
+- 등록한 입력은 모든 에이전트 단계(scope·interpret·critic)가 하나도 빼지 않고 연다. 열지 않은 자료를 근거로 `확인하지 못해` 라고 쓰지 않는다.
 - 코드는 등록한 커밋 기준으로 `git show`·`git grep`·`git ls-tree` 로 읽는다(작업 트리가 아니다).
 
 ## 사용자 결정

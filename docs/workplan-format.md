@@ -45,7 +45,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 
 - 원본끼리 어긋나면 우선순위는 **디자인 시안 > 기획 HTML > 기획 문서** 다. 단 정책·규칙(수신 조건, 마스킹, 저장 규칙)은 기획 문서가 정본이다. 어긋남은 `questions` 에 남긴다.
 - 확정된 구현 결정(context 원본)은 원본보다 앞선다.
-- 디자인 시스템에 같은 역할의 컴포넌트가 있으면 `exact`, 속성·조합으로 맞추면 `adapt`, 없으면 `custom` 이다. `custom` 은 이유를 적는다.
+- `ds.match` 는 이 컴포넌트가 디자인 시스템 부품을 어떻게 쓰는지다. 디자인 시스템 자체를 고친다는 뜻이 아니다. 같은 역할의 부품이 있어 그대로 쓰면 `exact`(화면 표시 `DS 그대로 사용`), 속성·조합으로 맞추면 `adapt`(`DS 부품 조합`), 없으면 `custom`(`DS에 없음`)이다. `custom` 은 이유를 적는다. 디자인 시스템 패키지의 파일을 바꾸는지는 `fileStatus` 와 `file` 경로·task 의 `changeKind`(`ds-component-new`·`ds-component-edit`)가 말한다.
 
 ## v2 — 변경 유형 · 지적 · 사용자 결정
 

@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { validate } from './validate.mjs';
+import { dsMatchLabel } from './lib/labels.mjs';
 import { canonical, sha256 } from './register.mjs';
 import { readDecisions, staleDecisions } from './decide.mjs';
 import { conformanceSection } from './lib/conformance-view.mjs';
@@ -107,7 +108,7 @@ export function renderReview(caseDir) {
     const nodes = p.components.filter((c) => c.surface === s.id);
     const walk = (parent) => nodes.filter((c) => (c.parent ?? null) === parent).map((c) => {
       const kids = walk(c.id);
-      return `<li><code class="id" id="${esc(c.id)}">${esc(c.id)}</code> <b>${esc(c.name)}</b> <code>${esc(c.file)}</code> <span class="tag ${c.fileStatus === 'new' ? 'warn' : ''}">${esc(c.fileStatus)}</span> <span class="tag">DS ${esc(c.ds.match)}</span> ${esc(c.ds.component ?? '')}<div class="ev">${text(c.ds.reason)}</div>${decisionBadge(c.id)}${kids.length ? `<ul>${kids.join('')}</ul>` : ''}</li>`;
+      return `<li><code class="id" id="${esc(c.id)}">${esc(c.id)}</code> <b>${esc(c.name)}</b> <code>${esc(c.file)}</code> <span class="tag ${c.fileStatus === 'new' ? 'warn' : ''}">${esc(c.fileStatus)}</span> <span class="tag">${esc(dsMatchLabel(c.ds.match))}</span> ${esc(c.ds.component ?? '')}<div class="ev">${text(c.ds.reason)}</div>${decisionBadge(c.id)}${kids.length ? `<ul>${kids.join('')}</ul>` : ''}</li>`;
     });
     return `<ul class="tree">${walk(null).join('')}</ul>`;
   };

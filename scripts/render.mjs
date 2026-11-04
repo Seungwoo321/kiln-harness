@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { validate } from './validate.mjs';
 import { canonical, sha256 } from './register.mjs';
 import { renderHtml } from './render-html.mjs';
+import { dsMatchLabel } from './lib/labels.mjs';
 
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
 const refs = (rs = []) => rs.map((r) => `\`${r.sourceId}\` ${r.locator}`).join('<br>');
@@ -22,7 +23,7 @@ export function render(caseDir) {
   const tree = (s) => {
     const nodes = p.components.filter((c) => c.surface === s.id);
     const walk = (parent, depth) => nodes.filter((c) => (c.parent ?? null) === parent)
-      .flatMap((c) => [`${'  '.repeat(depth)}- **${c.name}** — \`${c.file}\` (${c.fileStatus}) · DS: ${c.ds.component ?? '—'} [${c.ds.match}] ${c.ds.reason}`, ...walk(c.id, depth + 1)]);
+      .flatMap((c) => [`${'  '.repeat(depth)}- **${c.name}** — \`${c.file}\` (${c.fileStatus}) · DS: ${c.ds.component ?? '—'} [${dsMatchLabel(c.ds.match)}] ${c.ds.reason}`, ...walk(c.id, depth + 1)]);
     return walk(null, 0).join('\n') || '_없음_';
   };
 

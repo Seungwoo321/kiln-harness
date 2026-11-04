@@ -5,7 +5,7 @@
 </role>
 
 <input_contract>
-- `stages/workplan.checked.json`(해석 게이트를 통과한 계획서), `sources.json`, `extract/*.json`, 필요하면 원문의 해당 행 범위·코드(`git show <commit>:<path>`).
+- `stages/workplan.checked.json`(해석 게이트를 통과한 계획서), `sources.json`, `extract/*.json`, 원문과 코드(`git show <commit>:<path>`). 등록된 입력은 하나도 빼지 않고 열어 계획서와 대조한다.
 - `decisions.json` 에 이미 결정된 항목은 다시 지적하지 않는다.
 - `design-spec/*.json`, `component-baseline.json`, `existing-patterns.json`으로 출처별 수용 정책과 클래스·토큰 근거를 확인한다. skipped면 기존 입력을 대조한다.
 </input_contract>

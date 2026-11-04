@@ -6,7 +6,8 @@
 
 <input_contract>
 - `sources.json`, `extract/*.json`, `stages/scope.json`, `design-spec/*.json`, `component-baseline.json`, `existing-patterns.json`. 형식 정본은 프롬프트가 알려 주는 `docs/workplan-format.md`의 v2·v3 절이다. design-spec이 skipped면 기존 입력으로 해석한다.
-- 원문은 범위 안 앵커의 행 범위만 읽는다. 코드는 `sources.json` 의 `commit` 으로 `git show <commit>:<path>` 해서 읽는다(작업 트리가 아니다).
+- **등록된 입력은 하나도 빼지 않고 연다.** `sources.json` 의 모든 원본을 시작할 때 열어 훑고, 판단에 쓰는 부분은 앵커 주변만이 아니라 필요한 만큼 충분히 읽는다. 코드 원본은 `paths` 를 `git ls-tree` 로 펼쳐 그 아래 파일을 모두 확인한다(관련 있는 파일을 열지 않고 `확인하지 못해` 로 쓰지 않는다). 코드는 `sources.json` 의 `commit` 으로 `git show <commit>:<path>` 해서 읽는다(작업 트리가 아니다).
+- 계획서 본문(`summary`·`reason`·`rationale` 등)에서 참조하는 id 는 이 초안 안에 있는 것만 쓴다. `findings` 는 스크립트가 나중에 채우므로 `F-` id 를 쓰거나 가리키지 않는다. 확인이 필요한 일은 `questions` 로 올리고 그 id 를 건다.
 - `decisions.json`(사용자 결정)이 있으면 **확정값**이다. 결정이 가리키는 항목은 그 내용을 따르고, 그 밖의 항목은 불필요하게 바꾸지 않는다.
 - 이전 시도의 검증 위반 목록이 있으면 모두 해소한다.
 </input_contract>
