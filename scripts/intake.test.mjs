@@ -107,7 +107,7 @@ test('명령줄: 만들고 등록·추출·카탈로그까지 돌려 미리보�
   const ops = JSON.parse(readFileSync(join(dir, 'extract', 'api.json'), 'utf8')).anchors.filter((a) => a.type === 'operation');
   assert.deepEqual(ops.map((a) => a.value), ['listThings']); // 파일로 들어온 API 스펙에서 operation 추출
   const cat = JSON.parse(readFileSync(join(dir, 'references.json'), 'utf8'));
-  assert.equal(cat.brief, '샘플 작업'); assert.deepEqual(cat.missingRoles, []);
+  assert.equal(cat.brief, '샘플 작업'); assert.deepEqual(cat.missingRoles, ['design-system']); // 샘플에 DS 레포가 없다
   const bad = spawnSync('node', [CLI, '--spec', specFile, '--root', root], { encoding: 'utf8' });
   assert.equal(bad.status, 1); assert.ok(bad.stderr.includes('이미 있는 사례'));
 });

@@ -117,6 +117,27 @@ function codeAnchors(source) {
   return anchors;
 }
 
+// 디자인 시스템: export 앵커에 더해 컴포넌트 props 인덱스를 남긴다 — 에이전트는 수백 파일을 다 열지 않고
+// 이 인덱스로 후보 부품을 고른 뒤 그 파일만 연다. `export interface XxxProps { a?: T; b: U }` 와
+// `export type XxxProps = { ... }` 의 1단계 필드 이름만 읽는다(타입 해석은 하지 않는다).
+function designSystemAnchors(source) {
+  const anchors = codeAnchors(source);
+  const files = anchors.filter((a) => a.type === 'file').map((a) => a.value)
+    .filter((f) => /\.(tsx?)$/.test(f) && !/\.(test|stories|spec)\./.test(f) && !/\.d\.ts$/.test(f));
+  for (const file of files) {
+    const text = execFileSync('git', ['-C', source.repo, 'show', `${source.commit}:${file}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    for (const m of text.matchAll(/export\s+(?:interface|type)\s+([A-Za-z_$][\w$]*Props)\b[^{]*\{/g)) {
+      const start = m.index + m[0].length;
+      let depth = 1; let i = start;
+      while (i < text.length && depth > 0) { if (text[i] === '{') depth += 1; else if (text[i] === '}') depth -= 1; i += 1; }
+      const body = text.slice(start, i - 1);
+      const props = [...body.matchAll(/^\s{2}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*:/gm)].map((p) => p[1]);
+      if (props.length) anchors.push({ type: 'props', value: m[1], file, line: lineOf(text, m.index), props });
+    }
+  }
+  return anchors;
+}
+
 // Markdown: 제목을 절 경로로, 표 행과 목록 항목을 앵커로 남긴다.
 function markdownAnchors(text) {
   const anchors = [];
@@ -136,6 +157,7 @@ function extractOne(source) {
     const [file] = source.paths;
     return openapiAnchors(execFileSync('git', ['-C', source.repo, 'show', `${source.commit}:${file}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
   }
+  if (source.kind === 'code' && source.role === 'design-system') return designSystemAnchors(source);
   if (source.kind === 'code') return codeAnchors(source);
   if (source.kind === 'api-contract') return openapiAnchors(readFileSync(source.path, 'utf8')); // 레포 없이 파일로 들어온 API 스펙
   const text = readFileSync(source.path, 'utf8');

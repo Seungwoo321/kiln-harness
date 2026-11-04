@@ -44,7 +44,7 @@ export function validate(caseDir, planOverride) {
   const locators = makeResolver(caseDir, registry, extracts);
   const operations = new Set(registry.sources.filter((s) => s.role === 'contract')
     .flatMap((s) => extracts[s.id].anchors.filter((a) => a.type === 'operation').map((a) => a.value)));
-  const codeFiles = new Set(registry.sources.filter((s) => s.role === 'implementation')
+  const codeFiles = new Set(registry.sources.filter((s) => ['implementation', 'design-system'].includes(s.role))
     .flatMap((s) => extracts[s.id].anchors.filter((a) => a.type === 'file').map((a) => a.value)));
 
   // envelope
@@ -128,10 +128,12 @@ export function validate(caseDir, planOverride) {
   });
 
   list('i18n').forEach((k, i) => { const w = `i18n[${i}]`; if (!k.key) err(w, 'key 가 없음'); oneOf(w, 'status', k.status, 'i18nStatus'); });
-  // 파일 경로는 현재 코드에 있거나, components 가 new 로 선언한 파일이거나, newFiles 에 이유와 함께 선언돼 있어야 한다.
-  const declaredNew = new Set([...components.filter((c) => c.fileStatus === 'new').map((c) => c.file), ...(plan.newFiles ?? []).map((f) => f.file)]);
-  (plan.newFiles ?? []).forEach((f, i) => { if (!f.file || !f.reason) err(`newFiles[${i}]`, 'file·reason 이 필요함'); if (codeFiles.has(f.file)) err(`newFiles[${i}]`, `이미 있는 파일 — ${f.file}`); });
-  const knownFile = (w, file) => { if (file && !codeFiles.has(file) && !declaredNew.has(file)) err(w, `현재 코드에 없고 new 로 선언되지도 않은 파일 — ${file}`); };
+  // 신규 파일의 정본은 newFiles 하나다 — 현재 코드에 없는 파일은 모두 여기에 이유와 함께 있어야 하고, fileStatus:new 컴포넌트도 예외가 아니다.
+  const newFiles = Array.isArray(plan.newFiles) ? plan.newFiles : [];
+  const declaredNew = new Set(newFiles.map((f) => f.file));
+  newFiles.forEach((f, i) => { if (!f.file || !f.reason) err(`newFiles[${i}]`, 'file·reason 이 필요함'); if (codeFiles.has(f.file)) err(`newFiles[${i}]`, `이미 있는 파일 — ${f.file}`); });
+  for (const c of components) if (c.fileStatus === 'new' && !declaredNew.has(c.file)) err(`components:${c.id}`, `fileStatus:new 인데 newFiles 에 없음 — ${c.file}`);
+  const knownFile = (w, file) => { if (file && !codeFiles.has(file) && !declaredNew.has(file)) err(w, `현재 코드에 없고 newFiles 에 선언되지도 않은 파일 — ${file}`); };
   list('gaps').forEach((g, i) => { const w = `gaps[${i}]`; claim(g.id, w); onSurface(w, g.surface); for (const f of ['current', 'target']) if (!g[f]) err(w, `${f} 가 없음`); knownFile(w, g.file); });
 
   const questions = list('questions');
@@ -233,6 +235,8 @@ export function validate(caseDir, planOverride) {
   }
   for (const c of components) if (!covered.has(c.id)) err(`components:${c.id}`, '어느 task 도 다루지 않음');
   for (const b of plan.apiBindings ?? []) if (!covered.has(b.id)) err(`apiBindings:${b.id}`, '어느 task 도 다루지 않음');
+  const taskFiles = new Set(tasks.flatMap((t) => (Array.isArray(t.files) ? t.files : [])));
+  for (const f of newFiles) if (f.file && !taskFiles.has(f.file)) err(`newFiles:${f.file}`, '어느 task 의 files 에도 없음');
 
   if (v2) {
     list('findings').forEach((f, i) => {
@@ -241,6 +245,22 @@ export function validate(caseDir, planOverride) {
       for (const k of ['message', 'recommendation']) if (!f[k]) err(w, `${k} 가 없음`);
     });
     list('findings').forEach((f, i) => { if (!ids.has(f.target)) err(`findings[${i}]`, `target 이 가리키는 id 가 없음 — ${f.target}`); });
+  }
+  // 해석 초안의 본문이 가리키는 id 는 실재해야 한다. 특히 F- 는 비평이 나중에 채우므로 초안이 "F-01 로 확인한다" 처럼 미리 가리키면
+  // 그 확인 항목은 어디에도 남지 않는다 — 확인이 필요한 일은 questions 로 올린다. 비평 뒤의 계획서는 검사하지 않는다(지적 본문은
+  // 비평 시점의 id 를 인용하고, 그 뒤 질문이 결정으로 내려가며 id 가 바뀐다). lineage 는 이전 사례의 id 라 제외한다.
+  if (!(Array.isArray(plan.findings) && plan.findings.length)) {
+    const known = new Set([...ids.keys(), ...[...ids.keys()].filter((id) => id.startsWith('D-')).map((id) => id.slice(2))]);
+    const prefixes = new Set([...ids.keys()].map((id) => id.match(/^([A-Z]+)-/)?.[1]).filter(Boolean).concat(['F', 'Q', 'D']));
+    const idToken = new RegExp(`(?<![\\w-])(${[...prefixes].join('|')})-\\d+\\b`, 'g');
+    const dangling = new Map();
+    const walk = (node, path) => {
+      if (typeof node === 'string') { for (const m of node.matchAll(idToken)) if (!known.has(m[0])) dangling.set(m[0], path); return; }
+      if (Array.isArray(node)) node.forEach((x, i) => walk(x, `${path}[${i}]`));
+      else if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) walk(v, path ? `${path}.${k}` : k);
+    };
+    for (const [k, v] of Object.entries(plan)) if (!['lineage', 'inputDigests', 'caseId'].includes(k)) walk(v, k);
+    for (const [id, path] of dangling) err(path, `계획서에 없는 id 를 가리킴 — ${id}${id.startsWith('F-') ? ' (findings 는 비평이 채운다 — 확인이 필요한 일은 questions 로 올린다)' : ''}`);
   }
   // 후속 사례(lineage.json 이 있으면): 이전 결정은 이어받고, 이전 열린 확인 요청은 해소 여부를 가린다.
   const lineagePath = join(caseDir, 'lineage.json');

@@ -25,7 +25,7 @@ function fixture() {
   return dir;
 }
 const base = (over = {}) => ({
-  title: 'T', summary: 'S', newFiles: [],
+  title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }],
   surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [{ title: '계약', reason: '입력', sourceRefs: [specRef] }],
   requirements: [{ id: 'R1', surface: 'S1', statement: '형식 4종', acceptance: ['a'], basis: 'source', sourceRefs: ref }],
   states: [{ id: 'ST1', surface: 'S1', region: 'r', state: 's', condition: 'c', display: 'd', basis: 'source', sourceRefs: ref }],

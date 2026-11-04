@@ -15,7 +15,7 @@ const ref = [{ sourceId: 'plan1', locator: 'L1-2' }];
 const html = (extra = '') => `<html><body>\n<h1 id="a">화면</h1>\n<p>본문 마스킹은 부분 마스킹</p>\n${extra}</body></html>\n`;
 const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [] });
 const draftOut = (extra = {}) => ({
-  title: 'T', summary: 'S', newFiles: [], surfaces: scopeOut().surfaces, excluded: [],
+  title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }], surfaces: scopeOut().surfaces, excluded: [],
   requirements: [{ id: 'R1', surface: 'S1', statement: '마스킹', acceptance: ['a'], basis: 'source', sourceRefs: ref }],
   states: [{ id: 'ST1', surface: 'S1', region: 'r', state: 's', condition: 'c', display: 'd', basis: 'source', sourceRefs: ref }],
   components: [{ id: 'C1', surface: 'S1', name: 'A', file: 'src/a.tsx', fileStatus: 'new', ds: { component: null, match: 'custom', reason: '없다' }, sourceRefs: ref }],

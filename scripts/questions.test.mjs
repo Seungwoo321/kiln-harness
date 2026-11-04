@@ -27,7 +27,7 @@ const notice = (over = {}) => ({ id: 'Q1', kind: 'notice', to: 'backend', questi
 const confirm = (over = {}) => ({ id: 'Q2', kind: 'confirm', claimType: 'mismatch', to: 'plan', question: '기획과 계약의 형식 수가 다르다', options: [], assumption: '계약을 따른다', impact: ['R1'], sourceRefs: [...ref, { sourceId: 'spec', locator: 'ExportFormat' }], ...over });
 const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [{ title: '계약', reason: '입력 문서', sourceRefs: [{ sourceId: 'spec', locator: 'ExportFormat' }] }] });
 const draft = (questions = [notice()], extra = {}) => ({
-  title: 'T', summary: 'S', newFiles: [], surfaces: scopeOut().surfaces, excluded: scopeOut().excluded,
+  title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }], surfaces: scopeOut().surfaces, excluded: scopeOut().excluded,
   requirements: [
     { id: 'R1', surface: 'S1', statement: '형식 4종', acceptance: ['a'], basis: 'source', sourceRefs: ref },
     { id: 'R2', surface: 'S1', statement: 'JSON 옵션을 그린다', acceptance: ['a'], basis: 'inferred', question: 'Q1', sourceRefs: [] },

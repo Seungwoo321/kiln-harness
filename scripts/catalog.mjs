@@ -11,13 +11,14 @@ import { canonical, sha256 } from './register.mjs';
 import { readDesignSpecs } from './lib/design-policy.mjs';
 
 const ROLE_HINT = {
-  plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', context: '확정 결정·배경 문서',
+  plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', 'design-system': '디자인 시스템(공통 UI 부품) 코드', context: '확정 결정·배경 문서',
 };
 const COVERAGE_WARN = {
   plan: '기획 원본이 없다 — 요구사항의 출처가 없으므로 작업을 시작할 수 없다',
   design: '디자인 시안이 없다 — 화면 구성·상태는 기획과 현재 코드에서만 근거를 찾는다. 시안에서 온 것처럼 쓰지 않는다',
   contract: 'API 계약이 등록돼 있지 않다 — API·필드에 대한 사실은 단정하지 않는다. "계약에 없다"는 주장은 근거가 될 수 없다',
   implementation: '구현 코드가 등록돼 있지 않다 — 기존 파일·컴포넌트·패턴을 근거로 삼을 수 없다',
+  'design-system': '디자인 시스템 코드가 등록돼 있지 않다 — ds.match 는 부품의 실제 props·동작을 확인하지 않은 추정이 된다. 시안 유무와 무관하게 등록한다',
   context: '확정 결정·배경 문서가 없다',
 };
 
@@ -31,8 +32,9 @@ export function buildCatalog(caseDir) {
     const base = { id: s.id, role: s.role, kind: s.kind, note: s.note ?? null, anchors: anchorCount(s.id) };
     if (s.kind === 'code') {
       const paths = s.paths?.length ? s.paths : ['.'];
-      return { ...base, access: 'git', repo: s.repo, ref: s.ref, commit: s.commit, paths, entries: s.entries,
-        read: [`git -C ${s.repo} show ${s.commit}:<경로>`, `git -C ${s.repo} grep -n <패턴> ${s.commit} -- ${paths.join(' ')}`, `git -C ${s.repo} ls-tree -r ${s.commit} -- ${paths.join(' ')}`] };
+      const read = [`git -C ${s.repo} show ${s.commit}:<경로>`, `git -C ${s.repo} grep -n <패턴> ${s.commit} -- ${paths.join(' ')}`, `git -C ${s.repo} ls-tree -r ${s.commit} -- ${paths.join(' ')}`];
+      if (s.role === 'design-system') read.unshift(`extract/${s.id}.json 의 type:export·props 앵커로 후보 부품을 고른 뒤 그 파일만 git show 로 연다`);
+      return { ...base, access: 'git', repo: s.repo, ref: s.ref, commit: s.commit, paths, entries: s.entries, read };
     }
     const text = existsSync(s.path) && s.kind !== 'plan-doc' ? readFileSync(s.path, 'utf8') : null;
     return { ...base, access: 'file', path: s.path, location: insideCase(caseDir, s.path) ? `사례 폴더 안 (${relative(caseDir, s.path)})` : '사례 폴더 밖', bytes: s.bytes, lines: text === null ? null : text.split('\n').length };
@@ -54,7 +56,7 @@ export function buildCatalog(caseDir) {
 export function catalogText(c) {
   const lines = c.sources.map((s) => {
     const where = s.access === 'git'
-      ? `git ${s.repo} @ ${s.commit.slice(0, 9)} · 범위 ${s.paths.join(', ')} · 파일 ${s.entries}개 · 읽기: git -C <repo> show|grep|ls-tree <commit>`
+      ? `git ${s.repo} @ ${s.commit.slice(0, 9)} · 범위 ${s.paths.join(', ')} · 파일 ${s.entries}개 · 읽기: ${s.role === 'design-system' ? `extract/${s.id}.json 의 export·props 인덱스로 후보 부품을 고른 뒤 그 파일만 git show` : 'git -C <repo> show|grep|ls-tree <commit>'}`
       : `파일 ${s.location}${s.lines ? ` · ${s.lines}줄` : ''} · ${s.path}`;
     return `  - ${s.id} (${s.role}, ${s.kind}) ${where}${s.note ? ` — ${s.note}` : ''}`;
   });

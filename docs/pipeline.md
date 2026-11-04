@@ -62,10 +62,12 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 
 근거로 쓸 자료는 작업마다 다르다: 사례 폴더 안의 산출물, 경로만 아는 코드 레포, 있을 수도 없을 수도 있는 API 스펙, 참조해야 하는 백엔드 레포. 그래서 **세션이 시작될 때 쓸 수 있는 자료가 `inputs.json` 에 모두 등록돼 있어야 한다.**
 
-- 파일 원본(`plan-html`·`plan-doc`·`design-html`·`design-asset`·`context-doc`)은 경로로, 코드 레포(`code`)는 `repo`·`ref`·`paths` 로 등록한다(커밋으로 고정). 역할은 `plan`·`design`·`contract`·`implementation`·`context`. 백엔드 레포는 `code` + `implementation` 으로 하나 더 등록한다.
+- 파일 원본(`plan-html`·`plan-doc`·`design-html`·`design-asset`·`context-doc`)은 경로로, 코드 레포(`code`)는 `repo`·`ref`·`paths` 로 등록한다(커밋으로 고정). 역할은 `plan`·`design`·`contract`·`implementation`·`design-system`·`context`. 백엔드 레포는 `code` + `implementation` 으로 하나 더 등록한다.
+- API 계약(OpenAPI)은 레포 안에 있어도 `code` + `contract` 로 **따로** 등록한다(`paths` 는 계약 파일 하나 — 여럿이면 입력도 여럿). 구현 코드의 `paths` 에 묻어 들어가면 S1 이 거부한다. `contract` 가 있어야 S2 가 operation 앵커를 만들고 `apiBindings` 가 검사된다.
+- 디자인 시스템 패키지는 시안 유무와 무관하게 `code` + `design-system` 으로 등록한다. S2 가 export·props 인덱스를 `extract/<id>.json` 에 만들고, 에이전트는 인덱스로 후보 부품을 고른 뒤 그 파일만 연다. 부품 자체를 고쳐야 하는 변경은 `ds-component-edit`·`ds-component-new` task 로 분리된다(별도 태스크).
 - 없는 자료는 등록하지 않는다. `references.json` 이 역할별 부재를 알려 주고, 에이전트는 없는 자료(예: API 계약)에 대해 사실을 단정하지 않는다.
 - 에이전트는 카탈로그에 있는 자료만 근거로 고른다(`sourceRefs` 의 `sourceId`). 판단에 꼭 필요한 자료가 없으면 지어내지 않고 `missingInputs` 로 알린다 — 파이프라인은 재시도하지 않고 `run-status.json` 에 `result:"needs-input"` 과 목록을 남기고 종료 코드 3 으로 끝난다. `inputs.json` 에 자료를 더하고 다시 실행한다.
-- 등록한 입력은 모든 에이전트 단계(scope·interpret·critic)가 하나도 빼지 않고 연다. 열지 않은 자료를 근거로 `확인하지 못해` 라고 쓰지 않는다.
+- 등록한 입력은 모든 에이전트 단계(scope·interpret·critic)가 하나도 빼지 않고 연다. 열지 않은 자료를 근거로 `확인하지 못해` 라고 쓰지 않는다. 예외는 `design-system` 뿐이다 — 인덱스로 고른 부품 파일만 열고, scope 는 열지 않는다.
 - 코드는 등록한 커밋 기준으로 `git show`·`git grep`·`git ls-tree` 로 읽는다(작업 트리가 아니다).
 
 ## 사용자 결정
@@ -77,7 +79,8 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 - 스키마 적합
 - 모든 요구사항·상태·배치에 출처 앵커(`sourceRefs`)가 있다. 추론으로 채운 항목은 `inferred` 와 결정 id 를 가진다
 - 모든 `operationId` 가 등록된 API 계약에 있다
-- 모든 대상 파일이 현재 코드에 있거나 `new` 로 표시돼 있다
+- 모든 대상 파일이 현재 코드에 있거나 `newFiles` 에 이유와 함께 있다. `fileStatus:new` 컴포넌트의 파일도 `newFiles` 에 있고, `newFiles` 의 파일은 어느 task 의 `files` 에 나타난다
+- 해석 초안의 본문이 가리키는 id 는 초안 안에 실재한다. `F-`(비평이 채우는 지적) 를 미리 가리키면 위반이다 — 확인이 필요한 일은 `questions` 로 올린다
 - 범위 안 화면마다 상태 표(로딩·빈·오류·권한·비활성 등)가 채워져 있거나 `n/a` 근거가 있다
 - 열린 결정은 `questions` 에 모이고, 본문에서 확정값처럼 쓰이지 않는다
 

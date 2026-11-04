@@ -4,17 +4,20 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPipeline, loadConfig } from './lib/pipeline.mjs';
-import { buildCatalog } from './catalog.mjs';
+import { buildCatalog, catalogText } from './catalog.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';
 import { execFileSync } from 'node:child_process';
 import { buildCommand, cleanEnv, which } from './lib/runner.mjs';
 import { decide } from './decide.mjs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const ref = [{ sourceId: 'plan1', locator: 'L1-2' }];
 const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [] });
 const draftOut = () => ({
-  title: 'T', summary: 'S', newFiles: [],
+  title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }],
   surfaces: scopeOut().surfaces, excluded: [],
   requirements: [{ id: 'R1', surface: 'S1', statement: '요구', acceptance: ['a'], basis: 'source', sourceRefs: ref }],
   states: [{ id: 'ST1', surface: 'S1', region: 'r', state: 's', condition: 'c', display: 'd', basis: 'source', sourceRefs: ref }],
@@ -267,7 +270,7 @@ test('참조 카탈로그: 파일·코드 레포의 접근 방법과 없는 자�
   const plan = c.sources.find((s) => s.id === 'plan1'); const be = c.sources.find((s) => s.id === 'be');
   assert.equal(plan.access, 'file'); assert.ok(plan.location.startsWith('사례 폴더 안')); assert.ok(plan.lines > 0);
   assert.equal(be.access, 'git'); assert.ok(be.read.some((r) => r.includes('git -C') && r.includes('grep')));
-  assert.deepEqual(c.missingRoles.sort(), ['context', 'contract', 'design']);
+  assert.deepEqual(c.missingRoles.sort(), ['context', 'contract', 'design', 'design-system']);
   assert.ok(c.warnings.some((w) => w.startsWith('contract:') && w.includes('단정하지 않는다')));
   assert.ok(existsSync(join(dir, 'references.json')));
 });
@@ -307,4 +310,69 @@ test('필요한 자료가 입력에 없다고 알리면 재시도하지 않고 �
   const status = JSON.parse(readFileSync(join(dir, 'run-status.json'), 'utf8'));
   assert.equal(status.result, 'needs-input'); assert.equal(status.missingInputs.length, 1);
   assert.ok(existsSync(join(dir, 'stages', 'scope.json'))); // 지금까지의 작업은 보존한다
+});
+
+test('해석 게이트: 초안 본문이 없는 id(특히 F-)를 가리키면 위반이고, 다음 시도에서 고치면 통과한다', () => {
+  const { dir } = fixture();
+  const agent = fakeAgent({ interpret: (n) => { if (n === 1) { const d = draftOut(); d.summary = '이름 목록 조회는 findings F-01 로 백엔드에 확인한다'; return d; } } });
+  const r = go(dir, agent);
+  assert.equal(r.ok, true);
+  const second = agent.calls.filter((c) => c.stage === 'interpret')[1];
+  assert.ok(second.prompt.includes('계획서에 없는 id 를 가리킴 — F-01') && second.prompt.includes('questions 로 올린다'));
+});
+
+test('해석 게이트: fileStatus:new 컴포넌트와 task 파일은 newFiles 에 있어야 하고, newFiles 는 어느 task 에든 쓰여야 한다', () => {
+  const { dir } = fixture();
+  const agent = fakeAgent({ interpret: (n) => {
+    if (n === 1) { const d = draftOut(); d.newFiles = []; return d; }
+    if (n === 2) { const d = draftOut(); d.newFiles.push({ file: 'src/orphan.ts', reason: '아무 task 도 안 씀' }); return d; }
+  } });
+  const r = go(dir, agent);
+  assert.equal(r.ok, true);
+  const [, second, third] = agent.calls.filter((c) => c.stage === 'interpret');
+  assert.ok(second.prompt.includes('fileStatus:new 인데 newFiles 에 없음 — src/a.tsx'));
+  assert.ok(third.prompt.includes('newFiles:src/orphan.ts: 어느 task 의 files 에도 없음'));
+});
+
+test('등록: 코드 입력 안에 OpenAPI 가 있는데 contract 역할이 없으면 등록을 거부하고, contract 로 따로 등록하면 통과한다', () => {
+  const { dir } = fixture();
+  const repo = mkdtempSync(join(tmpdir(), 'kh-repo-')); mkdirSync(join(repo, 'src', 'api'), { recursive: true });
+  writeFileSync(join(repo, 'src', 'a.ts'), 'export const a = 1;\n');
+  writeFileSync(join(repo, 'src', 'api', 'openapi.yaml'), 'openapi: 3.0.0\npaths:\n  /x:\n    get:\n      operationId: getX\n');
+  execFileSync('git', ['-C', repo, 'init', '-q']); execFileSync('git', ['-C', repo, 'add', '-A']);
+  execFileSync('git', ['-C', repo, '-c', 'user.email=a@b', '-c', 'user.name=t', 'commit', '-qm', 'i']);
+  const inputs = JSON.parse(readFileSync(join(dir, 'inputs.json'), 'utf8'));
+  inputs.inputs.push({ id: 'fe', kind: 'code', role: 'implementation', repo, ref: 'HEAD', paths: ['src'], fetch: false });
+  writeFileSync(join(dir, 'inputs.json'), JSON.stringify(inputs));
+  const run = () => { try { execFileSync('node', [join(HERE, 'register.mjs'), dir], { encoding: 'utf8', stdio: 'pipe' }); return { code: 0 }; } catch (e) { return { code: e.status, err: String(e.stderr) }; } };
+  const refused = run();
+  assert.equal(refused.code, 2); assert.ok(refused.err.includes('contract 역할로 등록되지 않았습니다') && refused.err.includes('src/api/openapi.yaml'));
+  inputs.inputs.push({ id: 'api', kind: 'code', role: 'contract', repo, ref: 'HEAD', paths: ['src/api/openapi.yaml'], fetch: false });
+  writeFileSync(join(dir, 'inputs.json'), JSON.stringify(inputs));
+  assert.equal(run().code, 0);
+  extract(dir);
+  assert.ok(JSON.parse(readFileSync(join(dir, 'extract', 'api.json'), 'utf8')).anchors.some((a) => a.type === 'operation' && a.value === 'getX'));
+});
+
+test('디자인 시스템 역할: export·props 인덱스를 만들고 카탈로그가 인덱스 우선 읽기를 안내한다', () => {
+  const { dir } = fixture();
+  const repo = mkdtempSync(join(tmpdir(), 'kh-ds-')); mkdirSync(join(repo, 'ui', 'Button'), { recursive: true });
+  writeFileSync(join(repo, 'ui', 'Button', 'Button.tsx'), 'export interface ButtonProps extends Base {\n  variant?: "a" | "b";\n  disabled?: boolean;\n  onClick: () => void;\n}\nexport function Button(p: ButtonProps) { return null; }\n');
+  writeFileSync(join(repo, 'ui', 'Button', 'Button.stories.tsx'), 'export interface StoryProps { x: 1 }\n');
+  execFileSync('git', ['-C', repo, 'init', '-q']); execFileSync('git', ['-C', repo, 'add', '-A']);
+  execFileSync('git', ['-C', repo, '-c', 'user.email=a@b', '-c', 'user.name=t', 'commit', '-qm', 'i']);
+  const inputs = JSON.parse(readFileSync(join(dir, 'inputs.json'), 'utf8'));
+  inputs.inputs.push({ id: 'ds', kind: 'code', role: 'design-system', repo, ref: 'HEAD', paths: ['ui'], fetch: false });
+  writeFileSync(join(dir, 'inputs.json'), JSON.stringify(inputs));
+  register(dir); extract(dir);
+  const anchors = JSON.parse(readFileSync(join(dir, 'extract', 'ds.json'), 'utf8')).anchors;
+  const props = anchors.find((a) => a.type === 'props' && a.value === 'ButtonProps');
+  assert.deepEqual(props.props, ['variant', 'disabled', 'onClick']); assert.equal(props.file, 'ui/Button/Button.tsx');
+  assert.ok(!anchors.some((a) => a.type === 'props' && a.value === 'StoryProps'));
+  assert.ok(anchors.some((a) => a.type === 'export' && a.value === 'Button'));
+  const c = buildCatalog(dir);
+  assert.ok(c.sources.find((s) => s.id === 'ds').read[0].includes('export·props'));
+  assert.ok(!c.missingRoles.includes('design-system'));
+  const text = catalogText(c);
+  assert.ok(text.includes('ds (design-system, code)') && text.includes('인덱스로 후보 부품'));
 });

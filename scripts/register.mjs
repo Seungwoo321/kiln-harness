@@ -7,7 +7,9 @@ import { join, resolve, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const KINDS = new Set(['plan-html', 'plan-doc', 'design-html', 'design-asset', 'api-contract', 'code', 'context-doc']);
-const ROLES = new Set(['plan', 'design', 'contract', 'implementation', 'context']);
+const ROLES = new Set(['plan', 'design', 'contract', 'implementation', 'design-system', 'context']);
+// 계약 파일은 contract 역할로 따로 등록해야 S2 가 operation 앵커를 만들고 S5 가 apiBindings 를 검사한다.
+const CONTRACT_FILE = /(^|\/)(openapi|swagger)[^/]*\.(ya?ml|json)$/i;
 
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -36,7 +38,9 @@ function describeCode(input) {
   }
   const commit = execFileSync('git', ['-C', repo, 'rev-parse', `${ref}^{commit}`], { encoding: 'utf8' }).trim();
   const tree = execFileSync('git', ['-C', repo, 'ls-tree', '-r', commit, '--', ...paths], { encoding: 'utf8' });
-  return { repo, ref, commit, paths, sha256: sha256(tree), entries: tree.split('\n').filter(Boolean).length };
+  const files = tree.split('\n').filter(Boolean);
+  const contractFiles = input.role === 'contract' ? [] : files.map((l) => l.split('\t').pop()).filter((f) => CONTRACT_FILE.test(f));
+  return { repo, ref, commit, paths, sha256: sha256(tree), entries: files.length, contractFiles };
 }
 
 function describeFile(input) {
@@ -65,14 +69,20 @@ export function register(caseDir) {
   if (!caseId || !Array.isArray(inputs) || inputs.length === 0) fail('inputs.json 에 caseId 와 inputs[] 가 필요합니다');
 
   const ids = new Set();
+  const unregisteredContracts = [];
   const sources = inputs.map((input) => {
     if (!input.id || ids.has(input.id)) fail(`id 가 비었거나 중복입니다 — ${input.id}`);
     ids.add(input.id);
     if (!KINDS.has(input.kind)) fail(`${input.id}: kind 는 ${[...KINDS].join('|')} 중 하나`);
     if (!ROLES.has(input.role)) fail(`${input.id}: role 은 ${[...ROLES].join('|')} 중 하나`);
-    const body = input.kind === 'code' ? describeCode(input) : describeFile(input);
+    const { contractFiles = [], ...body } = input.kind === 'code' ? describeCode(input) : describeFile(input);
+    if (contractFiles.length) unregisteredContracts.push(`${input.id}: ${contractFiles.join(', ')}`);
     return { id: input.id, kind: input.kind, role: input.role, note: input.note ?? null, ...body };
   }).sort((a, b) => a.id.localeCompare(b.id));
+  // 코드 입력의 트리에 계약 파일이 있는데 contract 역할이 하나도 없으면 멈춘다 — 그대로 돌리면 apiBindings 가 조용히 빈다.
+  if (unregisteredContracts.length && !sources.some((s) => s.role === 'contract')) {
+    fail(`API 계약 파일이 코드 입력 안에 있지만 contract 역할로 등록되지 않았습니다 — 같은 repo·ref 로 role:"contract", paths:[<계약 파일>] 입력을 하나 더 추가하세요 (계약 파일이 여럿이면 입력도 여럿).\n  ${unregisteredContracts.join('\n  ')}`);
+  }
 
   const doc = { schemaVersion: 1, kind: 'SourceRegistry', caseId, sources };
   if (brief) doc.brief = String(brief);
