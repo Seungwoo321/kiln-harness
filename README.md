@@ -58,6 +58,8 @@ node scripts/run.mjs cases/<case>                  # 한 번에: 등록 → 추�
 node scripts/run.mjs cases/<case> --attempts 3 --loops 1   # 단계당 재시도 3회, 전체 재시작 1회(처음 돌릴 때 비용 상한)
 node scripts/run.mjs cases/<case> --level 3               # 검토 수준 0~10 (기본 5). 낮을수록 끼워 맞춰 구현하고 구현 불가만 묻는다, 높을수록 체계적으로 검증한다
 node scripts/decide.mjs cases/<case> <id> <stance> "<결정>"  # 검토 화면의 id 에 결정을 남긴다 → run.mjs 를 다시 돌리면 반영
+node scripts/run.mjs cases/<case> --rewrite             # 입력이 바뀌어도 증분 판정 없이 항상 전면 재작성
+node scripts/export-goal.mjs cases/<case> --out goal.json  # 승인된 분석을 실행용 목표(JSON)로 내보낸다
 node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stale] = 항목이 바뀌어 재확인 필요)
 node scripts/design-spec.mjs cases/<case>         # 렌더 증거만 수집 (sources.json 필요)
 node scripts/verify.mjs cases/<case> --url http://127.0.0.1:3000/ --code ../app/src/feature --theme dark
@@ -67,6 +69,7 @@ node scripts/verify.mjs --root <사례 폴더> --url http://127.0.0.1:3000/ --co
 - 결과: `review.html`(변경 유형·지적·질문·결정 화면), `WORKPLAN.html`·`WORKPLAN.md`(전체 문서), `run-status.json`(단계별 시도·토큰·시간·위반).
 - 종료 코드: `0` 통과 · `1` 실패(파생 산출물 삭제, 마지막 시도는 `failed/`) · `3` 입력 보강 필요(`run-status.json` 의 `missingInputs` — `inputs.json` 에 자료를 더하고 다시 실행).
 - **같은 입력이면 건너뛴다.** 원본·결정이 그대로이고 현재 계획서가 검증을 통과하면 에이전트를 부르지 않는다. 강제로 처음부터는 `--force`.
+- **입력이 일부만 바뀌면 증분으로 돌 수 있다.** 이전 실행과 비교해 영향 항목만 다시 쓰고 나머지 항목·이전 지적은 보존한다. 범위가 바뀌는 변화는 가드레일이 전면 재작성으로 돌린다(`docs/pipeline.md` 실행 구조). 항상 전면 재작성은 `--rewrite`.
 - 단계별 러너·모델은 `kh.config.json`(기본) → `cases/<case>/kh.config.json` → 환경변수 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT|SESSION>` 순으로 덮는다. `claude`·`codex` 와 각 CLI 가 지원하는 모델이면 무엇이든 된다.
 - 사례는 `cases/<case>/inputs.json` 에 원본 경로와 역할을 적어 시작한다(입력 구성은 `docs/pipeline.md`). 사례 폴더는 업무 자료라 레포에 올리지 않는다.
 - 이미 만든 `workplan.json` 이 있는 사례를 다시 돌리면 **최종 실패 시 그 산출물이 삭제된다.** 먼저 사례 폴더를 복사해 둔다.
@@ -92,6 +95,7 @@ inputs.json → register → extract → design-spec → catalog → scope → i
 
 - [`docs/pipeline.md`](docs/pipeline.md) — 단계, 게이트, 실행 구조, 입력 구성
 - [`docs/workplan-format.md`](docs/workplan-format.md) — 산출물 형식과 판정 규칙
+- [`docs/goal-export.md`](docs/goal-export.md) — 승인된 분석을 실행 목표로 내보내는 JSON 형식
 - [`docs/design-conformance.md`](docs/design-conformance.md) — 렌더 증거·컴포넌트·토큰·적합성 판정
 
 ## 개발

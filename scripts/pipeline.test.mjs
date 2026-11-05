@@ -359,6 +359,17 @@ test('디자인 시스템 역할: export·props 인덱스를 만들고 카탈로
   const repo = mkdtempSync(join(tmpdir(), 'kh-ds-')); mkdirSync(join(repo, 'ui', 'Button'), { recursive: true });
   writeFileSync(join(repo, 'ui', 'Button', 'Button.tsx'), 'export interface ButtonProps extends Base {\n  variant?: "a" | "b";\n  disabled?: boolean;\n  onClick: () => void;\n}\nexport function Button(p: ButtonProps) { return null; }\n');
   writeFileSync(join(repo, 'ui', 'Button', 'Button.stories.tsx'), 'export interface StoryProps { x: 1 }\n');
+  writeFileSync(join(repo, 'ui', 'Button', 'variants.ts'), [
+    "import { cva } from 'class-variance-authority';",
+    "export const buttonVariants = cva('inline-flex gap-2 {x}', {",
+    '  variants: {',
+    "    variant: { primary: 'bg-a', 'outline-dark': 'border', ghost: cn('x', { y: 1 }) },",
+    "    size: { sm: 'h-8', md: 'h-10' },",
+    '  },',
+    "  defaultVariants: { variant: 'primary', size: 'md' },",
+    '});',
+    "export const tagVariants = cva('t', { variants: { tone: { info: 'i', warn: 'w' } } });",
+    "export const plain = cva('no variants');", ''].join('\n'));
   execFileSync('git', ['-C', repo, 'init', '-q']); execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, '-c', 'user.email=a@b', '-c', 'user.name=t', 'commit', '-qm', 'i']);
   const inputs = JSON.parse(readFileSync(join(dir, 'inputs.json'), 'utf8'));
@@ -368,11 +379,18 @@ test('디자인 시스템 역할: export·props 인덱스를 만들고 카탈로
   const anchors = JSON.parse(readFileSync(join(dir, 'extract', 'ds.json'), 'utf8')).anchors;
   const props = anchors.find((a) => a.type === 'props' && a.value === 'ButtonProps');
   assert.deepEqual(props.props, ['variant', 'disabled', 'onClick']); assert.equal(props.file, 'ui/Button/Button.tsx');
+  assert.deepEqual(props.values, { variant: ['a', 'b'] });
   assert.ok(!anchors.some((a) => a.type === 'props' && a.value === 'StoryProps'));
+  const variants = anchors.filter((a) => a.type === 'variants');
+  assert.deepEqual(variants.map((a) => a.value), ['buttonVariants', 'tagVariants']); // variants 키가 없는 cva 는 인덱스에 넣지 않는다
+  assert.deepEqual(variants[0].variants, { variant: ['primary', 'outline-dark', 'ghost'], size: ['sm', 'md'] });
+  assert.deepEqual(variants[0].defaults, { variant: 'primary', size: 'md' });
+  assert.equal(variants[0].file, 'ui/Button/variants.ts'); assert.equal(variants[0].line, 2);
+  assert.deepEqual(variants[1].variants, { tone: ['info', 'warn'] }); assert.equal(variants[1].defaults, undefined);
   assert.ok(anchors.some((a) => a.type === 'export' && a.value === 'Button'));
   const c = buildCatalog(dir);
-  assert.ok(c.sources.find((s) => s.id === 'ds').read[0].includes('export·props'));
+  assert.ok(c.sources.find((s) => s.id === 'ds').read[0].includes('export·props·variants'));
   assert.ok(!c.missingRoles.includes('design-system'));
   const text = catalogText(c);
-  assert.ok(text.includes('ds (design-system, code)') && text.includes('인덱스로 후보 부품'));
+  assert.ok(text.includes('ds (design-system, code)') && text.includes('인덱스로 후보 부품') && text.includes('variants'));
 });
