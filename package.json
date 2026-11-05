@@ -17,5 +17,5 @@
     "verify": "node scripts/verify.mjs",
     "export-goal": "node scripts/export-goal.mjs"
   },
-  "version": "0.2.4"
+  "version": "0.2.5"
 }
