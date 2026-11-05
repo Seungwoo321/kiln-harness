@@ -117,9 +117,62 @@ function codeAnchors(source) {
   return anchors;
 }
 
-// 디자인 시스템: export 앵커에 더해 컴포넌트 props 인덱스를 남긴다 — 에이전트는 수백 파일을 다 열지 않고
-// 이 인덱스로 후보 부품을 고른 뒤 그 파일만 연다. `export interface XxxProps { a?: T; b: U }` 와
-// `export type XxxProps = { ... }` 의 1단계 필드 이름만 읽는다(타입 해석은 하지 않는다).
+// 짝이 맞는 닫는 중괄호 다음 위치를 돌려준다(start 는 여는 중괄호 바로 다음). 문자열 안의 괄호는 건너뛴다.
+function closeOf(text, start) {
+  let depth = 1; let quote = null; let i = start;
+  for (; i < text.length && depth > 0; i += 1) {
+    const c = text[i];
+    if (quote) { if (c === '\\') i += 1; else if (c === quote) quote = null; } else if (c === '"' || c === "'" || c === '`') quote = c;
+    else if (c === '{' || c === '(' || c === '[') depth += 1; else if (c === '}' || c === ')' || c === ']') depth -= 1;
+  }
+  return i;
+}
+
+// 객체 본문을 최상위 `key: value` 로 쪼갠다. 값은 원문 그대로다.
+function topEntries(body) {
+  const entries = []; let depth = 0; let quote = null; let from = 0;
+  const push = (end) => {
+    const seg = body.slice(from, end); const at = seg.indexOf(':');
+    if (at > 0) entries.push([seg.slice(0, at).trim().replace(/^(['"])(.*)\1$/, '$2'), seg.slice(at + 1).trim()]);
+    from = end + 1;
+  };
+  for (let i = 0; i < body.length; i += 1) {
+    const c = body[i];
+    if (quote) { if (c === '\\') i += 1; else if (c === quote) quote = null; } else if (c === '"' || c === "'" || c === '`') quote = c;
+    else if ('{(['.includes(c)) depth += 1; else if ('})]'.includes(c)) depth -= 1;
+    else if (c === ',' && depth === 0) push(i);
+  }
+  push(body.length);
+  return entries;
+}
+
+const objectBody = (value) => (value.startsWith('{') ? value.slice(1, value.lastIndexOf('}')) : null);
+const literal = (v) => v.match(/^(['"`])(.*)\1$/)?.[2];
+
+// class-variance-authority(cva)·tailwind-variants(tv) 의 `variants: { 축: { 값: 클래스 } }` 에서 축 이름과 값 목록을, defaultVariants 에서 기본값을 읽는다.
+function variantAnchors(text, file) {
+  const calls = [...text.matchAll(/(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:cva|tv)\s*\(/g)];
+  const anchors = [];
+  calls.forEach((m, n) => {
+    const chunk = text.slice(m.index, calls[n + 1]?.index ?? text.length);
+    const v = chunk.match(/\bvariants\s*:\s*\{/);
+    if (!v) return;
+    const start = v.index + v[0].length;
+    const axes = Object.fromEntries(topEntries(chunk.slice(start, closeOf(chunk, start) - 1))
+      .map(([axis, value]) => [axis, topEntries(objectBody(value) ?? '').map(([name]) => name)]).filter(([, names]) => names.length));
+    if (!Object.keys(axes).length) return;
+    const d = chunk.match(/\bdefaultVariants\s*:\s*\{/);
+    const defaults = d ? Object.fromEntries(topEntries(chunk.slice(d.index + d[0].length, closeOf(chunk, d.index + d[0].length) - 1)).map(([k, val]) => [k, literal(val) ?? val]).filter(([, val]) => val)) : {};
+    anchors.push({ type: 'variants', value: m[1], file, line: lineOf(text, m.index), variants: axes, ...(Object.keys(defaults).length ? { defaults } : {}) });
+  });
+  return anchors;
+}
+
+// 디자인 시스템: export 앵커에 더해 컴포넌트 인덱스를 남긴다 — 에이전트는 수백 파일을 다 열지 않고
+// 이 인덱스로 후보 부품을 고른 뒤 그 파일만 연다.
+//   props     `export interface XxxProps { a?: T; b: U }` · `export type XxxProps = { ... }` 의 1단계 필드 이름과,
+//             한 줄 문자열 리터럴 유니온(`variant?: 'a' | 'b'`)이면 그 값(values). 타입 해석은 하지 않는다.
+//   variants  cva·tv 로 정의한 스타일 변형의 축(variant·size …)과 값, 기본값.
 function designSystemAnchors(source) {
   const anchors = codeAnchors(source);
   const files = anchors.filter((a) => a.type === 'file').map((a) => a.value)
@@ -128,12 +181,14 @@ function designSystemAnchors(source) {
     const text = execFileSync('git', ['-C', source.repo, 'show', `${source.commit}:${file}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     for (const m of text.matchAll(/export\s+(?:interface|type)\s+([A-Za-z_$][\w$]*Props)\b[^{]*\{/g)) {
       const start = m.index + m[0].length;
-      let depth = 1; let i = start;
-      while (i < text.length && depth > 0) { if (text[i] === '{') depth += 1; else if (text[i] === '}') depth -= 1; i += 1; }
-      const body = text.slice(start, i - 1);
-      const props = [...body.matchAll(/^\s{2}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*:/gm)].map((p) => p[1]);
-      if (props.length) anchors.push({ type: 'props', value: m[1], file, line: lineOf(text, m.index), props });
+      const body = text.slice(start, closeOf(text, start) - 1);
+      const fields = [...body.matchAll(/^\s{2}(?:readonly\s+)?([A-Za-z_$][\w$]*)\??\s*:(.*)$/gm)];
+      const values = Object.fromEntries(fields.map((p) => [p[1], p[2].trim().replace(/;$/, '')])
+        .filter(([, t]) => /^(?:'[^']*'|"[^"]*")(?:\s*\|\s*(?:'[^']*'|"[^"]*"))*$/.test(t))
+        .map(([k, t]) => [k, [...t.matchAll(/['"]([^'"]*)['"]/g)].map((x) => x[1])]));
+      if (fields.length) anchors.push({ type: 'props', value: m[1], file, line: lineOf(text, m.index), props: fields.map((p) => p[1]), ...(Object.keys(values).length ? { values } : {}) });
     }
+    anchors.push(...variantAnchors(text, file));
   }
   return anchors;
 }

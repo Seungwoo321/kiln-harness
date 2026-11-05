@@ -45,7 +45,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 
 - 원본끼리 어긋나면 우선순위는 **디자인 시안 > 기획 HTML > 기획 문서** 다. 단 정책·규칙(수신 조건, 마스킹, 저장 규칙)은 기획 문서가 정본이다. 어긋남은 `questions` 에 남긴다.
 - 확정된 구현 결정(context 원본)은 원본보다 앞선다.
-- `ds.match` 는 이 컴포넌트가 디자인 시스템 부품을 어떻게 쓰는지다. 디자인 시스템 자체를 고친다는 뜻이 아니다. 같은 역할의 부품이 있어 그대로 쓰면 `exact`(화면 표시 `DS 그대로 사용`), 속성·조합으로 맞추면 `adapt`(`DS 부품 조합`), 없으면 `custom`(`DS에 없음`)이다. `custom` 은 이유를 적는다. `ds.reason` 에는 확인한 부품 파일의 `path:line`(`design-system` 원본)을 적는다. 디자인 시스템 패키지의 파일을 바꾸는지는 `fileStatus` 와 `file` 경로·task 의 `changeKind`(`ds-component-new`·`ds-component-edit`)가 말한다. 그 task 는 제목에 `[DS 별도 태스크]` 를 달아 피처 작업과 분리한다.
+- `ds.match` 는 이 컴포넌트가 디자인 시스템 부품을 어떻게 쓰는지다. 디자인 시스템 자체를 고친다는 뜻이 아니다. 같은 역할의 부품이 있어 그대로 쓰면 `exact`(화면 표시 `DS 그대로 사용`), 속성·조합으로 맞추면 `adapt`(`DS 부품 조합`), 없으면 `custom`(`DS에 없음`)이다. `custom` 은 이유를 적는다. `ds.reason` 에는 확인한 부품 파일의 `path:line`(`design-system` 원본)을 적고, variant·size 를 고르면 인덱스의 `variants` 축과 값을 인용한다. 디자인 시스템 패키지의 파일을 바꾸는지는 `fileStatus` 와 `file` 경로·task 의 `changeKind`(`ds-component-new`·`ds-component-edit`)가 말한다. 그 task 는 제목에 `[DS 별도 태스크]` 를 달아 피처 작업과 분리한다.
 
 ## v2 — 변경 유형 · 지적 · 사용자 결정
 
@@ -54,7 +54,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 | 절 | 필드 |
 |---|---|
 | `tasks[].changeKind` | `new-page`·`new-menu`·`ds-component-new`·`ds-component-edit`·`feature-change`(기존 피처의 배치·컴포넌트 수정)·`feature-copy`(문구)·`i18n`·`api-wiring` — 모든 task 가 하나를 가진다 |
-| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` — 입력 산출물이나 계획서의 불완전한 부분 |
+| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` `carriedFrom?` — 입력 산출물이나 계획서의 불완전한 부분. `carriedFrom` 은 증분 실행에서 이월된 지적이 처음 나온 실행(`history/<runId>`)이다 |
 
 `stance` 는 권고다: `follow-existing`(기존 패턴을 따른다) · `re-review`(다시 검토한다) · `ask-plan`·`ask-design`·`ask-backend`(담당자에게 확인한다).
 

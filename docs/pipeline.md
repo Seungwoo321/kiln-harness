@@ -25,6 +25,7 @@
 | S4 interpret | 에이전트 `roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
 | S5 validate | 스크립트 | 후보 계획서 → 위반 목록 (아래 게이트). 위반은 S4 의 다음 시도에 주입된다 |
 | S6 critic | 에이전트 `roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재 |
+| S0 triage | 스크립트 + 에이전트 `roles/triage.md` | 입력이 바뀐 재실행에서 이전 스냅샷과 현재 입력 → `delta.json`·`triage.json` (skip·incremental·rewrite, 영향 id). 가드레일이 먼저 rewrite 를 강제한다 (실행 구조 참조) |
 | S7 render | 스크립트 | `WORKPLAN.md` · `WORKPLAN.html`(전체 문서) · `review.html`(변경 유형·지적·결정 화면) |
 | S8 verify | 스크립트 + 에이전트 `roles/conformance.md` | 구현 URL·코드 → `conformance-facts.json` → LLM 판정 → `conformance.json`·`conformance-brief.md`·review.html의 시안 적합성 절 |
 
@@ -55,6 +56,13 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 - **실시간 표시:** 에이전트는 자식 프로세스로 띄워 출력을 `stages/.agent-*.log` 에 쌓고(같은 프로세스 그룹 — Ctrl-C 가 함께 간다), 부모는 1초마다 깨어 로그를 이어 읽어 터미널 진행 블록을 다시 그린다(`lib/live.mjs`).
 - **최종 실패:** 파생 산출물을 모두 삭제한다. 원본·`decisions.json` 은 보존하고 위반은 `run-status.json` 에 남는다.
 - **건너뛰기·재개:** 원본과 결정이 그대로이고 현재 계획서가 검증을 통과하면 에이전트를 부르지 않는다. 결정만 바뀌면 `scope.json` 을 이어받고 기존 계획서 위에서 해당 항목만 다시 해석한다(`run-status.json` 의 `changedIds`).
+- **증분 리뷰:** 입력이 바뀌어 다시 돌리면 이전 실행의 스냅샷(`history/<runId>/`)과 현재 입력을 비교해 `delta.json` 을 만들고, `triage` 역할이 `skip`(영향 없음)·`incremental`(영향 항목만 갱신)·`rewrite`(전면 재작성)를 판정한다. 판정·근거·적용된 가드레일은 `triage.json` 과 `run-status.json` 의 `triage` 에 남는다. 아래 규칙은 코드가 건다.
+  - 다음이면 `triage` 를 부르지 않고 `rewrite` 다: 바뀐 입력 비율이 `triage.maxChangedRatio`(기본 0.5)를 넘음 · 삭제된 입력이 `triage.maxRemoved`(기본 1)건을 넘음 · `plan`·`design` 입력(범위 경계)이 추가·교체·삭제됨 · 입력 파일은 같고 등록 정보만 바뀜. 후속 사례(`previous`)와 검토 수준 변경도 대상이 아니다. 기준값은 `kh.config.json` 의 `triage` 로 덮는다.
+  - `incremental` 인데 `impactIds` 가 비었거나 이전 계획서에 없는 id 이면, 바뀐 입력을 근거로 든 항목이 `impactIds` 에도 이유를 단 `kept` 에도 없으면 판정이 통과하지 못한다. 판정 단계가 끝내 통과하지 못하면 `rewrite` 로 돌아가고 사유를 남긴다. 결정(`decisions.json`)이 바뀐 실행은 `skip` 할 수 없다.
+  - 증분 해석은 `scope.json` 과 기존 계획서를 이어받는다. 게이트는 `impactIds` 밖 항목이 정규형(digest) 단위로 그대로인지 확인한다. 영향 항목과 새 항목만 바뀔 수 있다.
+  - 증분 비평은 영향·신규 항목만 다룬다(질문 판정·지적 대상·검토 수준 8 이상의 화면 대조). 범위 밖 항목에 대한 이전 지적은 `carriedFrom: <최초 run>` 을 달아 이월되고, 범위 안의 이전 지적은 다시 지적되지 않으면 해소로 기록된다(`triage.json` 의 `findings.carried·resolved·raised`). 새 지적의 id 는 이월 id 뒤로 이어진다.
+  - 증분 시도가 통과하지 못하면 전체 루프의 다음 시도가 전면 재작성이다. `--rewrite`(또는 `--force`)는 판정 없이 항상 전면 재작성 경로를 강제한다.
+  - 스냅샷은 성공한 실행마다 하나(계획서가 같으면 만들지 않음)이며 최근 `triage.keepRuns`(기본 10)개만 둔다.
 - **권한:** 에이전트는 읽기와 `stages/` 아래 쓰기만 한다. 원본 해시가 바뀌면 그 시도는 실패다.
 - **앰비언트 토큰:** Claude 는 전역 규칙·훅·스킬·MCP 를 끊어 새 세션 비용이 약 3천 토큰이다(끄지 않으면 약 2.8만). Codex 는 훅을 꺼도 기본 약 4.1만이다.
 
@@ -64,7 +72,7 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 
 - 파일 원본(`plan-html`·`plan-doc`·`design-html`·`design-asset`·`context-doc`)은 경로로, 코드 레포(`code`)는 `repo`·`ref`·`paths` 로 등록한다(커밋으로 고정). 역할은 `plan`·`design`·`contract`·`implementation`·`design-system`·`context`. 백엔드 레포는 `code` + `implementation` 으로 하나 더 등록한다.
 - API 계약(OpenAPI)은 레포 안에 있어도 `code` + `contract` 로 **따로** 등록한다(`paths` 는 계약 파일 하나 — 여럿이면 입력도 여럿). 구현 코드의 `paths` 에 묻어 들어가면 S1 이 거부한다. `contract` 가 있어야 S2 가 operation 앵커를 만들고 `apiBindings` 가 검사된다.
-- 디자인 시스템 패키지는 시안 유무와 무관하게 `code` + `design-system` 으로 등록한다. S2 가 export·props 인덱스를 `extract/<id>.json` 에 만들고, 에이전트는 인덱스로 후보 부품을 고른 뒤 그 파일만 연다. 부품 자체를 고쳐야 하는 변경은 `ds-component-edit`·`ds-component-new` task 로 분리된다(별도 태스크).
+- 디자인 시스템 패키지는 시안 유무와 무관하게 `code` + `design-system` 으로 등록한다. S2 가 export·props(문자열 유니온 값 포함)·variants(cva·tv 의 축과 값, 기본값) 인덱스를 `extract/<id>.json` 에 만들고, 에이전트는 인덱스로 후보 부품을 고른 뒤 그 파일만 연다. 부품 자체를 고쳐야 하는 변경은 `ds-component-edit`·`ds-component-new` task 로 분리된다(별도 태스크).
 - 없는 자료는 등록하지 않는다. `references.json` 이 역할별 부재를 알려 주고, 에이전트는 없는 자료(예: API 계약)에 대해 사실을 단정하지 않는다.
 - 에이전트는 카탈로그에 있는 자료만 근거로 고른다(`sourceRefs` 의 `sourceId`). 판단에 꼭 필요한 자료가 없으면 지어내지 않고 `missingInputs` 로 알린다 — 파이프라인은 재시도하지 않고 `run-status.json` 에 `result:"needs-input"` 과 목록을 남기고 종료 코드 3 으로 끝난다. `inputs.json` 에 자료를 더하고 다시 실행한다.
 - 등록한 입력은 모든 에이전트 단계(scope·interpret·critic)가 하나도 빼지 않고 연다. 열지 않은 자료를 근거로 `확인하지 못해` 라고 쓰지 않는다. 예외는 `design-system` 뿐이다 — 인덱스로 고른 부품 파일만 열고, scope 는 열지 않는다.
@@ -102,5 +110,7 @@ cases/<case>/
   WORKPLAN.md · WORKPLAN.html · review.html   # S7
   run-status.json    # 단계별 시도·토큰·결과·위반
   conformance-facts.json · conformance.json · conformance-brief.md   # S8
+  history/<runId>/   # 성공한 실행의 스냅샷(meta.json 입력 digest · scope · workplan · critic)
+  delta.json · triage.json   # 증분 리뷰: 입력 변화와 판정(영향 id·가드레일·이월 지적)
   failed/            # 실패한 전체 시도의 스냅샷
 ```

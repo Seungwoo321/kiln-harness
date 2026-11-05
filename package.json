@@ -14,7 +14,8 @@
     "render": "node scripts/render.mjs",
     "test": "node --test 'scripts/*.test.mjs'",
     "design-spec": "node scripts/design-spec.mjs",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "export-goal": "node scripts/export-goal.mjs"
   },
   "version": "0.2.4"
 }

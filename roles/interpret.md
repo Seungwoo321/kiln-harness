@@ -7,7 +7,7 @@
 <input_contract>
 - `sources.json`, `extract/*.json`, `stages/scope.json`, `design-spec/*.json`, `component-baseline.json`, `existing-patterns.json`. 형식 정본은 프롬프트가 알려 주는 `docs/workplan-format.md`의 v2·v3 절이다. design-spec이 skipped면 기존 입력으로 해석한다.
 - **등록된 입력은 하나도 빼지 않고 연다.** `sources.json` 의 모든 원본을 시작할 때 열어 훑고, 판단에 쓰는 부분은 앵커 주변만이 아니라 필요한 만큼 충분히 읽는다. 코드 원본은 `paths` 를 `git ls-tree` 로 펼쳐 그 아래 파일을 모두 확인한다(관련 있는 파일을 열지 않고 `확인하지 못해` 로 쓰지 않는다). 코드는 `sources.json` 의 `commit` 으로 `git show <commit>:<path>` 해서 읽는다(작업 트리가 아니다).
-- **디자인 시스템(`design-system` 역할)은 인덱스로 연다.** `extract/<sourceId>.json` 의 `export`·`props` 앵커로 후보 부품을 고른 뒤 그 부품의 파일만 `git show` 로 열어 props·disabled·툴팁 같은 실제 동작을 확인한다. 패키지 전체를 훑지 않는다. 시안이 있어도 같다 — 시안↔부품 매칭의 근거는 시안 위치와 부품 파일의 `path:line` 둘 다다.
+- **디자인 시스템(`design-system` 역할)은 인덱스로 연다.** `extract/<sourceId>.json` 의 `export`·`props`·`variants` 앵커로 후보 부품을 고른 뒤 그 부품의 파일만 `git show` 로 열어 props·disabled·툴팁 같은 실제 동작을 확인한다. 패키지 전체를 훑지 않는다. 시안이 있어도 같다 — 시안↔부품 매칭의 근거는 시안 위치와 부품 파일의 `path:line` 둘 다다.
 - 계획서 본문(`summary`·`reason`·`rationale` 등)에서 참조하는 id 는 이 초안 안에 있는 것만 쓴다. `findings` 는 스크립트가 나중에 채우므로 `F-` id 를 쓰거나 가리키지 않는다. 확인이 필요한 일은 `questions` 로 올리고 그 id 를 건다.
 - `decisions.json`(사용자 결정)이 있으면 **확정값**이다. 결정이 가리키는 항목은 그 내용을 따르고, 그 밖의 항목은 불필요하게 바꾸지 않는다.
 - 이전 시도의 검증 위반 목록이 있으면 모두 해소한다.
@@ -21,7 +21,7 @@
 - `surfaces`·`excluded` 는 `stages/scope.json` 과 같다(화면을 더하거나 빼지 않는다).
 - 모든 항목의 `id` 는 유일하다. `sourceRefs` 를 단다. 원본에 없어 채운 것은 `basis:"inferred"` 로 표시하고 `question` 에 `questions` 의 id 를 건다.
 - `states` 는 화면마다 로딩·빈·오류·권한·비활성·성공 등을 채운다. 해당 없으면 `n/a` 근거를 적는다.
-- `components` 는 현재 코드의 파일 구조를 따라 배치 트리(`parent`)를 만들고, 디자인 시스템 매칭(`ds.match`: exact|adapt|custom + 이유)을 적는다. 디자인 시스템 export 를 먼저 찾고, `ds.reason` 에는 확인한 부품 파일의 `path:line` 을 적는다. 부품의 props·조합으로 되지 않아 **부품 자체를 고쳐야 하면** 그 수정은 `changeKind: ds-component-edit`(새 부품이면 `ds-component-new`) task 로 분리하고 제목에 `[DS 별도 태스크]` 를 붙인다 — 디자인 시스템 수정은 보통 피처 작업과 다른 티켓으로 처리된다. 피처 task 는 그 DS task 에 `dependsOn` 을 건다.
+- `components` 는 현재 코드의 파일 구조를 따라 배치 트리(`parent`)를 만들고, 디자인 시스템 매칭(`ds.match`: exact|adapt|custom + 이유)을 적는다. 디자인 시스템 export 를 먼저 찾고, `ds.reason` 에는 확인한 부품 파일의 `path:line` 을 적고, 부품의 variant·size 같은 변형을 고르면 `variants` 앵커의 축과 값(예: `size: md`)을 그대로 인용한다. 앵커에 없는 값은 쓰지 않는다 — 필요하면 부품 수정(`ds-component-edit`)이다. 부품의 props·조합으로 되지 않아 **부품 자체를 고쳐야 하면** 그 수정은 `changeKind: ds-component-edit`(새 부품이면 `ds-component-new`) task 로 분리하고 제목에 `[DS 별도 태스크]` 를 붙인다 — 디자인 시스템 수정은 보통 피처 작업과 다른 티켓으로 처리된다. 피처 task 는 그 DS task 에 `dependsOn` 을 건다.
 - `apiBindings` 의 `operationId` 는 계약에 있는 것만 쓴다. 응답 필드→화면 상태, 실패→표시를 잇는다.
 - `tasks` 는 모든 component·apiBinding 을 `covers` 로 다룬다. **모든 task 에 `changeKind` 를 단다**:
   `new-page`·`new-menu`(change:new 화면을 covers) / `ds-component-new`(fileStatus:new component) / `ds-component-edit`(fileStatus:existing component) / `feature-change`(기존 피처의 배치·컴포넌트 수정) / `feature-copy`(문구) / `i18n`(다국어) / `api-wiring`(apiBinding).

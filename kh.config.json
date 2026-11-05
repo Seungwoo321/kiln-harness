@@ -12,6 +12,12 @@
       "effort": "medium",
       "session": "chain"
     },
+    "triage": {
+      "runner": "claude",
+      "model": "opus",
+      "effort": "medium",
+      "session": "fresh"
+    },
     "interpret": {
       "runner": "claude",
       "model": "sonnet",
@@ -37,5 +43,10 @@
       "size": 1,
       "spacing": 2
     }
+  },
+  "triage": {
+    "maxChangedRatio": 0.5,
+    "maxRemoved": 1,
+    "keepRuns": 10
   }
 }

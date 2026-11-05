@@ -33,7 +33,7 @@ export function buildCatalog(caseDir) {
     if (s.kind === 'code') {
       const paths = s.paths?.length ? s.paths : ['.'];
       const read = [`git -C ${s.repo} show ${s.commit}:<경로>`, `git -C ${s.repo} grep -n <패턴> ${s.commit} -- ${paths.join(' ')}`, `git -C ${s.repo} ls-tree -r ${s.commit} -- ${paths.join(' ')}`];
-      if (s.role === 'design-system') read.unshift(`extract/${s.id}.json 의 type:export·props 앵커로 후보 부품을 고른 뒤 그 파일만 git show 로 연다`);
+      if (s.role === 'design-system') read.unshift(`extract/${s.id}.json 의 type:export·props·variants 앵커로 후보 부품을 고른 뒤 그 파일만 git show 로 연다`);
       return { ...base, access: 'git', repo: s.repo, ref: s.ref, commit: s.commit, paths, entries: s.entries, read };
     }
     const text = existsSync(s.path) && s.kind !== 'plan-doc' ? readFileSync(s.path, 'utf8') : null;
@@ -56,7 +56,7 @@ export function buildCatalog(caseDir) {
 export function catalogText(c) {
   const lines = c.sources.map((s) => {
     const where = s.access === 'git'
-      ? `git ${s.repo} @ ${s.commit.slice(0, 9)} · 범위 ${s.paths.join(', ')} · 파일 ${s.entries}개 · 읽기: ${s.role === 'design-system' ? `extract/${s.id}.json 의 export·props 인덱스로 후보 부품을 고른 뒤 그 파일만 git show` : 'git -C <repo> show|grep|ls-tree <commit>'}`
+      ? `git ${s.repo} @ ${s.commit.slice(0, 9)} · 범위 ${s.paths.join(', ')} · 파일 ${s.entries}개 · 읽기: ${s.role === 'design-system' ? `extract/${s.id}.json 의 export·props·variants 인덱스로 후보 부품과 variant·size 값을 고른 뒤 그 파일만 git show` : 'git -C <repo> show|grep|ls-tree <commit>'}`
       : `파일 ${s.location}${s.lines ? ` · ${s.lines}줄` : ''} · ${s.path}`;
     return `  - ${s.id} (${s.role}, ${s.kind}) ${where}${s.note ? ` — ${s.note}` : ''}`;
   });
