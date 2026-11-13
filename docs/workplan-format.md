@@ -69,10 +69,11 @@ changeKind 와 covers 의 정합(결정적 검사)
 
 | 필드 | 뜻 |
 |---|---|
-| `id` | 계획서의 항목 id (surfaces·requirements·states·components·apiBindings·gaps·questions·tasks·findings) |
+| `id` | 계획서의 항목 id (surfaces·requirements·states·components·apiBindings·gaps·questions·decisions·tasks·findings) |
 | `stance` | 위 권고 값 또는 `decided`(결정 확정) |
 | `note` | 결정 내용 |
-| `itemDigest` | 결정 시점 항목의 digest. 항목이 다시 해석돼 달라지면 화면에 `stale` 로 드러난다 |
+| `section` | 결정 시점 항목의 계획서 섹션 |
+| `itemDigest` | 결정 시점 항목의 digest. 항목이 다시 해석돼 달라지면 화면에 `stale` 로 드러난다. 결정 기록 밖의 항목(지적·질문·작업 등)에 대한 결정을 같은 id 의 결정 기록(`decisions`)으로 이어받은 것은 `stale` 이 아니다. 이어받은 기록이 그 뒤 다시 바뀐 것은 여기서 드러나지 않는다 — 비평이 `decisions.json` 과 대조한다 |
 
 계획서에 없는 id 를 가리키는 결정은 검증에서 막힌다. 시각은 적지 않는다.
 
@@ -89,7 +90,7 @@ changeKind 와 covers 의 정합(결정적 검사)
 
 `basis:"inferred"` 항목은 반드시 `kind:"notice"` 질문을 `question` 으로 가리킨다.
 
-**질문에서 빠지는 것은 원본이 이미 답한 것뿐이다 — `decisions` 로만 기록한다.** `decisions[]` = `{id, kind, statement, rationale, sourceRefs, surface?}`
+**질문에서 빠지는 것은 원본이 이미 답한 것뿐이다 — `decisions` 로만 기록한다.** `decisions[]` = `{id, kind, statement, rationale, sourceRefs, surface?}`. `id` 는 `D-` 로 시작한다 — 사용자 결정(`decisions.json`)이 가리키는 다른 항목을 이어받은 기록만 그 항목의 id 를 그대로 쓴다
 
 | `kind` | 뜻 |
 |---|---|
