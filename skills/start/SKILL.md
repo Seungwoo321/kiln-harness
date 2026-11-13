@@ -43,6 +43,7 @@ description: 기획·디자인 산출물을 개발 계획서로 바꾸는 작업
    - 계정을 나눠 쓰면 작업에 맞는 계정의 설정 폴더로 실행한다: `export CLAUDE_CONFIG_DIR=<설정 폴더>` (codex 는 `CODEX_HOME`).
    - 처음에는 `--attempts 3 --loops 1` 로 비용 상한을 둔다. `--level 0~10`(기본 5)으로 검토 수준을 정한다 — 낮을수록 근거 자료에 끼워 맞춰 구현하고 구현 불가만 묻고, 높을수록 체계적으로 검증한다. 모델·러너는 `kh.config.json` 이나 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT>` 환경변수로 바꾼다.
    - 이미 산출물이 있는 사례를 다시 돌리면 최종 실패 시 삭제되므로 먼저 폴더를 복사해 둔다.
+   - 진행 중 에이전트가 무엇을 읽고 실행하는지는 다른 터미널에서 `node "$KH/scripts/agent-log.mjs" <사례 폴더> --follow` 로 본다(Claude Code 화면처럼 도구 호출·결과 요약, 단계가 바뀌면 다음 로그로 넘어간다. `--stage scope|interpret|critic` 으로 단계 지정, `--full` 은 결과 전문).
    - 결과는 `review.html`. 항목 id 에 결정을 남기려면 `decide` 스킬이나 `decide.mjs` 를 쓴다.
 
 ## 규칙

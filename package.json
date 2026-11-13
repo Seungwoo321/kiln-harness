@@ -8,6 +8,7 @@
   "packageManager": "pnpm@12.7.0",
   "scripts": {
     "run": "node scripts/run.mjs",
+    "log": "node scripts/agent-log.mjs",
     "register": "node scripts/register.mjs",
     "extract": "node scripts/extract.mjs",
     "validate": "node scripts/validate.mjs",
