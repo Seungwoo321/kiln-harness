@@ -18,6 +18,7 @@ description: 기획·디자인 산출물을 개발 계획서로 바꾸는 작업
 2. **자료를 읽기 전용으로 훑는다.** `ls`, 파일 앞부분, `git -C <경로> rev-parse` 로 종류를 확인하고 역할을 추정한다.
    - 역할: `plan`(기획) · `design`(시안) · `contract`(API 스펙) · `implementation`(현재 코드) · `design-system`(디자인 시스템 패키지 — 시안 유무와 무관하게 등록) · `context`(확정 결정·배경).
    - 레포 안의 OpenAPI 는 `implementation` 의 `paths` 에 넣지 않고 같은 레포를 `contract` 로 한 번 더 등록한다(`paths` 는 계약 파일 하나). 묻어 넣으면 등록 단계가 거부한다.
+   - 디자인 시안 HTML 이 같은 레포의 CSS·JS 를 상대 경로로 불러오면 `copy` 하지 않고 원본 레포 안의 경로를 `mode: "reference"` 로 넣는다(복사본은 렌더 자산이 없어 S2d 가 실패한다). 원격 최신이 필요하면 그 레포를 해당 커밋으로 `git worktree add --detach` 해 쓴다.
    - 읽을 수 있는 형식: HTML·docx·Markdown·텍스트·JS/CSS/SVG·OpenAPI(yaml/json)·git 레포. **이미지·PDF 는 읽을 수 없다** — HTML 이나 텍스트로 변환해서 달라고 한다. git 이 아닌 폴더는 통째로 받지 않고 파일을 하나씩 지정한다.
    - 애매한 역할은 한 번에 모아서 묻는다. 기획(`plan`)이 하나도 없으면 시작할 수 없다고 알린다.
 3. **정할 것을 정한다.**
@@ -43,7 +44,7 @@ description: 기획·디자인 산출물을 개발 계획서로 바꾸는 작업
    - 계정을 나눠 쓰면 작업에 맞는 계정의 설정 폴더로 실행한다: `export CLAUDE_CONFIG_DIR=<설정 폴더>` (codex 는 `CODEX_HOME`).
    - 처음에는 `--attempts 3 --loops 1` 로 비용 상한을 둔다. `--level 0~10`(기본 5)으로 검토 수준을 정한다 — 낮을수록 근거 자료에 끼워 맞춰 구현하고 구현 불가만 묻고, 높을수록 체계적으로 검증한다. 모델·러너는 `kh.config.json` 이나 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT>` 환경변수로 바꾼다.
    - 이미 산출물이 있는 사례를 다시 돌리면 최종 실패 시 삭제되므로 먼저 폴더를 복사해 둔다.
-   - 진행 중 에이전트가 무엇을 읽고 실행하는지는 다른 터미널에서 `node "$KH/scripts/agent-log.mjs" <사례 폴더> --follow` 로 본다(Claude Code 화면처럼 도구 호출·결과 요약, 단계가 바뀌면 다음 로그로 넘어간다. `--stage scope|interpret|critic` 으로 단계 지정, `--full` 은 결과 전문).
+   - 진행 중 에이전트가 무엇을 읽고 실행하는지는 다른 터미널에서 `node "$KH/scripts/agent-log.mjs" <사례 폴더> --follow` 로 본다(Claude Code 화면처럼 에이전트 말·생각 자리·도구 호출·결과 요약, 단계가 바뀌면 다음 로그로 넘어간다. `--stage scope|interpret|critic` 으로 단계 지정, `--full` 은 결과 전문).
    - 결과는 `review.html`. 항목 id 에 결정을 남기려면 `decide` 스킬이나 `decide.mjs` 를 쓴다.
 
 ## 규칙

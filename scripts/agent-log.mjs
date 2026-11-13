@@ -11,6 +11,7 @@ const tty = process.stdout.isTTY;
 const paint = (code) => (s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
 const dim = paint('2'); const bold = paint('1'); const red = paint('31'); const green = paint('32'); const cyan = paint('36');
 
+let thinking = 0; // 직전 생각 블록의 추정 토큰(thinking_tokens 는 블록 안에서 누적값으로 온다)
 let cwd = ''; // init 줄의 작업 폴더 — 경로를 그 기준 상대 경로로 줄여 보인다
 const rel = (s) => (cwd ? String(s).split(`${cwd}/`).join('') : String(s));
 const one = (s, n = 160) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -27,12 +28,13 @@ function resultText(content) {
   return JSON.stringify(content ?? '');
 }
 
-// claude stream-json 한 줄 → 보일 줄들. 보일 것이 없으면 빈 배열(생각 토큰·rate limit 등).
+// claude stream-json 한 줄 → 보일 줄들. 보일 것이 없으면 빈 배열(생각 토큰 집계·rate limit 등).
 export function renderClaudeLine(line, { full = false } = {}) {
   let o;
   try { o = JSON.parse(line); } catch { return line.trim() ? [line] : []; }
   if (o.type === 'system' && o.subtype === 'init') cwd = o.cwd ?? '';
   if (o.type === 'system' && o.subtype === 'init') return [dim(`세션 ${o.session_id} · 모델 ${o.model ?? '-'} · cwd ${o.cwd}`)];
+  if (o.type === 'system' && o.subtype === 'thinking_tokens') { thinking = o.estimated_tokens ?? thinking; return []; }
   if (o.type === 'system' && o.subtype === 'permission_denied') return [red(`  ⛔ 거부: ${o.tool_name} — ${one(o.message, 120)}`)];
   if (o.type === 'result') {
     const u = o.usage ?? {};
@@ -43,7 +45,9 @@ export function renderClaudeLine(line, { full = false } = {}) {
   const blocks = Array.isArray(o.message?.content) ? o.message.content : [];
   const out = [];
   for (const b of blocks) {
-    if (o.type === 'assistant' && b.type === 'text' && b.text.trim()) out.push('', `${bold('⏺')} ${b.text.trim()}`);
+    // 생각 본문은 비대화 실행에서 비어 온다(서명만) — 생각한 자리와 추정 분량만 보인다.
+    if (o.type === 'assistant' && b.type === 'thinking') { out.push('', dim(`✻ 생각${thinking ? ` (~${thinking.toLocaleString()} 토큰)` : ''}${b.thinking?.trim() ? ` — ${one(b.thinking, 200)}` : ''}`)); thinking = 0; }
+    else if (o.type === 'assistant' && b.type === 'text' && b.text.trim()) out.push('', `${bold('⏺')} ${b.text.trim()}`);
     else if (o.type === 'assistant' && b.type === 'tool_use') {
       if (b.name === 'StructuredOutput') out.push('', `${bold('⏺')} ${cyan('결과 제출')}`);
       else out.push('', `${bold('⏺')} ${cyan(toolLabel(b.name, b.input))}`);
