@@ -48,7 +48,8 @@ export function buildCommand(spec) {
   if (runner === 'claude') {
     const sessionArgs = session?.mode === 'resume' ? ['--resume', session.id] : session?.mode === 'new' ? ['--session-id', session.id] : ['--no-session-persistence'];
     // stream-json: 도구 호출이 줄 단위로 로그에 쌓여 진행 상황을 볼 수 있다. 마지막 줄(result)이 json 형식과 같다.
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', ...sessionArgs,
+    // 프롬프트는 stdin 으로 준다(input). 인자로 넘기면 큰 사례에서 OS 인자 한도(E2BIG)를 넘는다.
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', ...sessionArgs,
       '--json-schema', JSON.stringify(STATUS_SCHEMA), '--append-system-prompt', role,
       // 앰비언트 컨텍스트(전역 규칙·훅·스킬·MCP)를 끊는다 — 실측 약 2.8만 → 3천 토큰.
       '--setting-sources', 'project', '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
@@ -56,7 +57,7 @@ export function buildCommand(spec) {
     if (model) args.push('--model', model);
     if (effort) args.push('--effort', effort);
     for (const d of addDirs) args.push('--add-dir', d);
-    return { cmd: process.env.KH_CLAUDE || 'claude', args, cwd };
+    return { cmd: process.env.KH_CLAUDE || 'claude', args, cwd, input: prompt };
   }
   if (runner === 'codex') {
     // codex 에는 시스템 프롬프트 추가 플래그가 없어 역할을 프롬프트 앞에 붙인다. 읽기는 전체, 쓰기는 작업 디렉터리뿐(workspace-write).
@@ -67,8 +68,8 @@ export function buildCommand(spec) {
     if (model) args.push('-m', model);
     if (effort) args.push('-c', `model_reasoning_effort=${effort}`);
     if (resume) args.push(session.id);
-    args.push(`${role}\n\n---\n\n${prompt}`);
-    return { cmd: process.env.KH_CODEX || 'codex', args, cwd };
+    args.push('-'); // '-' = 프롬프트를 stdin 에서 읽는다
+    return { cmd: process.env.KH_CODEX || 'codex', args, cwd, input: `${role}\n\n---\n\n${prompt}` };
   }
   throw new Error(`알 수 없는 runner — ${runner} (claude|codex)`);
 }
@@ -104,14 +105,17 @@ export function runAgent(spec) {
   const lastFile = join(work, '.last-message.json');
   const logFile = join(work, `.agent-${spec.logName ?? spec.runner}.log`);
   writeFileSync(schemaFile, JSON.stringify(STATUS_SCHEMA));
-  const { cmd, args, cwd } = buildCommand({ ...spec, schemaFile });
+  const { cmd, args, cwd, input } = buildCommand({ ...spec, schemaFile });
+  const inputFile = join(work, '.prompt.txt');
+  writeFileSync(inputFile, input);
   const finalArgs = spec.runner === 'codex' ? [...args.slice(0, -1), '-o', lastFile, args.at(-1)] : args;
   rmSync(lastFile, { force: true });
   const started = Date.now();
   const env = cleanEnv();
   const fd = openSync(logFile, 'w');
+  const inFd = openSync(inputFile, 'r');
   let child;
-  try { child = spawn(which(cmd, env.PATH), finalArgs, { cwd, env, stdio: ['ignore', fd, fd] }); } finally { closeSync(fd); }
+  try { child = spawn(which(cmd, env.PATH), finalArgs, { cwd, env, stdio: [inFd, fd, fd] }); } finally { closeSync(fd); closeSync(inFd); }
   child.on('error', () => {}); // 실행 파일이 없으면 pid 가 없다 — 아래에서 판정한다
   const deadline = started + (spec.timeoutSec ?? 1800) * 1000;
   let timedOut = false;
