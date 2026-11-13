@@ -14,10 +14,17 @@ test('에이전트 기록: 도구 호출은 이름(핵심 인자), 결과는 앞
   assert.equal(renderClaudeLine(j({ type: 'user', message: { content: [{ type: 'tool_result', content: '1\n2\n3\n4\n5' }] } }), { full: true }).length, 5);
 });
 
-test('에이전트 기록: 생각 토큰·rate limit 은 숨기고, 거부·실패·끝은 보인다', () => {
-  assert.deepEqual(renderClaudeLine(j({ type: 'system', subtype: 'thinking_tokens' })), []);
+test('에이전트 기록: 생각은 자리와 추정 토큰으로 보이고(본문이 있으면 요약), rate limit 은 숨긴다', () => {
+  assert.deepEqual(renderClaudeLine(j({ type: 'system', subtype: 'thinking_tokens', estimated_tokens: 50 })), []);
+  assert.deepEqual(renderClaudeLine(j({ type: 'system', subtype: 'thinking_tokens', estimated_tokens: 1200 })), []);
+  const t = renderClaudeLine(j({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }] } }));
+  assert.ok(t.at(-1).includes('생각') && t.at(-1).includes('1,200'));
+  assert.ok(!renderClaudeLine(j({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }] } })).at(-1).includes('토큰'));
+  assert.ok(renderClaudeLine(j({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: '계획을 세운다' }] } })).at(-1).includes('계획을 세운다'));
   assert.deepEqual(renderClaudeLine(j({ type: 'rate_limit_event' })), []);
-  assert.deepEqual(renderClaudeLine(j({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }] } })), []);
+});
+
+test('에이전트 기록: 거부·실패·끝은 보인다', () => {
   assert.ok(renderClaudeLine(j({ type: 'system', subtype: 'permission_denied', tool_name: 'Bash', message: 'no' }))[0].includes('거부'));
   assert.ok(renderClaudeLine(j({ type: 'result', is_error: false, duration_ms: 2000, total_cost_usd: 1.5, usage: { input_tokens: 1, output_tokens: 2 } })).at(-1).includes('$1.50'));
   assert.ok(renderClaudeLine(j({ type: 'user', message: { content: [{ type: 'tool_result', is_error: true, content: 'boom' }] } }))[0].includes('✗'));

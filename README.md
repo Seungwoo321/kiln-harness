@@ -49,7 +49,27 @@ codex plugin add kiln-harness@kiln-harness
 
 `run.mjs` 를 돌리는 터미널에 에이전트가 도는 동안 같은 자리에서 갱신되는 진행 블록이 뜬다: 검토 수준·전체 경과·단계 흐름(`scope✓ interpret▶ critic·`), 지금 단계의 시도·러너·경과 시간·도구 호출 수·출력 토큰, **지금 읽고 쓰는 파일·명령**(최근 3개), 누적 호출·토큰·비용. 단계 결과([단계] 통과/위반 …)는 블록을 지우고 그대로 남는다. 파이프로 넘기거나 TTY 가 아니면 블록 없이 1분마다 한 줄 신호만 낸다. 에이전트 원본 출력은 `stages/.agent-<단계>-<시도>.log` 에 남는다(Claude 는 stream-json).
 
-원본 로그를 Claude Code 화면처럼 읽으려면 다른 터미널에서 `node scripts/agent-log.mjs cases/<case> --follow` 를 띄운다. 도구 호출은 `⏺ Bash(설명)`, 결과는 `⎿` 아래 앞 3줄과 남은 줄 수, 거부·실패는 빨간 표시, 끝나면 경과·토큰·비용이 나온다. 생각 토큰·rate limit 줄은 숨긴다. 단계가 바뀌면 다음 로그로 넘어간다. `--stage scope|interpret|critic` 으로 단계를 고르고, `--full` 이면 결과를 줄이지 않는다. codex 로그는 원문 그대로 보인다.
+### 에이전트 기록 보기 (`agent-log`)
+
+원본 로그를 Claude Code·Codex 의 에이전트 화면처럼 읽는다. `run.mjs` 를 띄운 터미널과 별도로 다른 터미널에서 실행한다.
+
+```bash
+node scripts/agent-log.mjs cases/<case> --follow          # 실행 중 기록을 실시간으로 따라간다(1초 간격, 단계가 바뀌면 다음 로그로)
+node scripts/agent-log.mjs cases/<case> --stage interpret  # 특정 단계의 가장 최근 시도만 한 번 보인다
+node scripts/agent-log.mjs cases/<case> --follow --full    # 도구 결과를 줄이지 않고 전부 보인다
+```
+
+| 표시 | 뜻 |
+|---|---|
+| `━━ interpret-1 ━━` | 단계·시도 구분 |
+| `⏺ 에이전트 말` | 에이전트가 쓴 텍스트 |
+| `✻ 생각 (~1,200 토큰)` | 생각한 자리와 추정 분량. 비대화 실행(`claude -p`)은 생각 본문을 내보내지 않으므로 본문은 보이지 않는다 |
+| `⏺ Read(sources/…)` | 도구 호출 — 이름과 핵심 인자(설명·명령·파일·패턴). 경로는 사례 폴더 기준 상대 경로 |
+| `⎿ …` / `… +N줄` | 도구 결과 앞 3줄과 남은 줄 수(`--full` 이면 전부) |
+| `⛔ 거부` · `⎿ ✗` | 권한 거부 · 도구 실패(빨강) |
+| `✓ 끝 227초 · 토큰 … · $2.52` | 단계 시도 종료와 비용 |
+
+rate limit 줄은 숨긴다. codex 로그는 이미 사람이 읽는 형식이라 원문 그대로 보인다. 에이전트가 생각만 하는 동안은 로그가 늘지 않아 화면이 잠시 멈춰 보일 수 있다.
 
 **색상:** TTY 에서는 단계 흐름(✓ 초록 · ▶ 청록 · ✗ 빨강 · ! 노랑), 경과 시간(5분 미만 초록 · 15분 미만 노랑 · 그 이상 빨강), 도구 종류(읽기 파랑 · 실행 노랑 · 쓰기 초록), 비용, `[단계]` 로그(실패·위반 빨강, 통과 초록, 보강 필요 노랑)에 색을 입힌다. `NO_COLOR=1` 이면 끄고, `FORCE_COLOR=1` 이면 TTY 가 아니어도 켠다.
 
@@ -63,6 +83,7 @@ node scripts/decide.mjs cases/<case> <id> <stance> "<결정>"  # 검토 화면�
 node scripts/run.mjs cases/<case> --rewrite             # 입력이 바뀌어도 증분 판정 없이 항상 전면 재작성
 node scripts/export-goal.mjs cases/<case> --out goal.json  # 승인된 분석을 실행용 목표(JSON)로 내보낸다
 node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stale] = 항목이 바뀌어 재확인 필요)
+node scripts/agent-log.mjs cases/<case> --follow   # 에이전트 기록을 실시간으로 본다(위 「에이전트 기록 보기」)
 node scripts/design-spec.mjs cases/<case>         # 렌더 증거만 수집 (sources.json 필요)
 node scripts/verify.mjs cases/<case> --url http://127.0.0.1:3000/ --code ../app/src/feature --theme dark
 node scripts/verify.mjs --root <사례 폴더> --url http://127.0.0.1:3000/ --code <기능 폴더> --source <시안 id>
@@ -75,6 +96,8 @@ node scripts/verify.mjs --root <사례 폴더> --url http://127.0.0.1:3000/ --co
 - 단계별 러너·모델은 `kh.config.json`(기본) → `cases/<case>/kh.config.json` → 환경변수 `KH_<SCOPE|INTERPRET|CRITIC>_<RUNNER|MODEL|EFFORT|SESSION>` 순으로 덮는다. `claude`·`codex` 와 각 CLI 가 지원하는 모델이면 무엇이든 된다.
 - 사례는 `cases/<case>/inputs.json` 에 원본 경로와 역할을 적어 시작한다(입력 구성은 `docs/pipeline.md`). 사례 폴더는 업무 자료라 레포에 올리지 않는다.
 - 이미 만든 `workplan.json` 이 있는 사례를 다시 돌리면 **최종 실패 시 그 산출물이 삭제된다.** 먼저 사례 폴더를 복사해 둔다.
+- **디자인 시안 HTML 은 원본 위치를 참조(`mode: "reference"`)로 넣는다.** 시안이 같은 레포의 CSS·JS·이미지를 상대 경로로 불러오면, 파일만 복사(`copy`)했을 때 S2d 렌더가 자산 404 로 실패한다. 디자인 시스템 레포를 원하는 커밋으로 꺼내(예: `git worktree add --detach`) 그 안의 페이지 경로를 넣는다. S2d 는 페이지에서 위로 올라가며 `components/` 나 `.git` 이 있는 폴더를 자산 루트로 삼는다.
+- 에이전트 프롬프트는 `stages/.prompt.txt` 에 쓰고 표준 입력으로 넘긴다(명령줄 인자 한도와 무관하다). 같은 프롬프트로 재현할 때 이 파일을 쓴다. 렌더 증거는 프롬프트에 요약하지 않고 파일 위치만 넘겨 에이전트가 필요한 부분만 읽는다.
 - S2d는 시안의 상대 좌표·스타일·클래스·토큰·클릭 동작과 DS 기준을 수집한다. Chrome은 `KH_CHROME`, 기본 설치 경로, PATH 순으로 찾는다. Chrome 부재는 `design-spec:skipped`로 기록한다.
 - S8은 `conformance-facts.json`에 사실을 수집한다. 별도 LLM 세션이 의미 대응과 수용 여부를 판단한다. 결과는 `conformance.json`, 검토 화면의 **시안 적합성**, `conformance-brief.md`다. gap·ds-override·token-missing·behavior-mismatch 판정이 있으면 종료 코드 1이다. needs-component는 경고다. 판단 미완료는 3이다. 여러 시안은 `--source`로 화면에 대응시킨다.
 - plan UI는 기존 코드 패턴을 우선한다. design의 구조·동작·문구는 엄격히 따른다. px보다 컴포넌트 규칙이 우선한다. 정책·분류표는 [파이프라인](docs/pipeline.md#출처별-수용-정책)을 따른다.
