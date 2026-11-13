@@ -126,11 +126,14 @@ export function criticScope(before, after, impact) {
 
 // 지적 이월: 비평 범위 밖 항목에 대한 이전 지적은 항목이 그대로이므로 해소되지 않은 것이다 — 최초 발생 run 을 남기며 이월한다.
 // 비평 범위 안의 이전 지적은 새 비평이 다시 판단하므로, 다시 지적되지 않으면 해소된 것으로 기록한다. 새 지적의 id 는 이월 id 뒤로 이어 붙인다.
-export function mergeFindings(prevFindings, fresh, scope, planIds, previousRunId) {
+// taken: 계획서의 다른 id(결정 등). 새 지적 번호는 그 id 와도 겹치지 않게 건너뛴다 — 결정 id 가 이전 지적 번호(F-…)를 이어 쓰기 때문이다.
+export function mergeFindings(prevFindings, fresh, scope, planIds, previousRunId, taken = new Set()) {
   const carried = prevFindings.filter((f) => !scope.ids.has(f.target) && planIds.has(f.target)).map((f) => ({ ...f, carriedFrom: f.carriedFrom ?? previousRunId }));
   const used = [...carried, ...prevFindings].map((f) => Number(String(f.id).match(/(\d+)$/)?.[1] ?? 0));
   let n = Math.max(0, ...used);
-  const raised = fresh.map((f) => { n += 1; return { ...f, id: `F-${String(n).padStart(3, '0')}` }; });
+  const busy = new Set([...taken, ...planIds, ...carried.map((f) => f.id)]);
+  const next = () => { let id; do { n += 1; id = `F-${String(n).padStart(3, '0')}`; } while (busy.has(id)); busy.add(id); return id; };
+  const raised = fresh.map((f) => ({ ...f, id: next() }));
   const carriedIds = new Set(carried.map((f) => f.id));
   return { findings: [...carried, ...raised], report: { carried: carried.map((f) => ({ id: f.id, carriedFrom: f.carriedFrom })), resolved: prevFindings.filter((f) => !carriedIds.has(f.id)).map((f) => f.id), raised: raised.map((f) => f.id) } };
 }

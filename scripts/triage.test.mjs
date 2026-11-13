@@ -207,3 +207,9 @@ test('증분 게이트·지적 이월: 영향 밖 항목 보존, 비평 범위, 
   assert.deepEqual(m.findings.map((f) => [f.id, f.target, f.carriedFrom]), [['F-002', 'R2', '001-x'], ['F-004', 'R3', undefined]]);
   assert.deepEqual(m.report, { carried: [{ id: 'F-002', carriedFrom: '001-x' }], resolved: ['F-001', 'F-003'], raised: ['F-004'] });
 });
+
+test('지적 이월: 새 지적 번호는 계획서의 다른 id(결정 F-… 등)와 겹치지 않게 건너뛴다', () => {
+  const scope = { ids: new Set(['R1']), surfaces: new Set() };
+  const m = mergeFindings([], [{ target: 'R1' }, { target: 'R1' }, { target: 'R1' }], scope, new Set(['R1']), '003-z', new Set(['F-001', 'F-002', 'F-004']));
+  assert.deepEqual(m.findings.map((f) => f.id), ['F-003', 'F-005', 'F-006']);
+});

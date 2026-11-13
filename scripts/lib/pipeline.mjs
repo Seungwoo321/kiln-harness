@@ -213,7 +213,8 @@ export function criticGate(dir, registry, plan, inc = null) {
   let coverage = crit.coverage;
   let report = null;
   if (inc) {
-    ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId));
+    const taken = new Set(Object.entries(applied).filter(([k, v]) => k !== 'findings' && Array.isArray(v)).flatMap(([, v]) => v.map((x) => x?.id).filter(Boolean)));
+    ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId, taken));
     const planSurfaces = new Set((plan.surfaces ?? []).map((x) => x.id));
     coverage = [...(inc.prev.coverage ?? []).filter((c) => !inc.scope.surfaces.has(c.surface) && planSurfaces.has(c.surface)), ...(crit.coverage ?? [])];
   }
