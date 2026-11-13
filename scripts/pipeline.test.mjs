@@ -163,7 +163,9 @@ test('러너 명령: claude 와 codex 는 같은 입력으로 각자의 플래�
   const x = buildCommand({ ...spec, runner: 'codex' });
   assert.equal(x.args[0], 'exec'); assert.ok(x.args.includes('--output-schema') && x.args.includes('--ephemeral'));
   assert.equal(x.args[x.args.indexOf('-m') + 1], 'm1'); assert.ok(x.args.includes('model_reasoning_effort=high'));
-  assert.ok(x.args.at(-1).startsWith('ROLE') && x.args.at(-1).endsWith('P'));
+  assert.equal(x.args.at(-1), '-'); assert.ok(x.input.startsWith('ROLE') && x.input.endsWith('P'));
+  // 프롬프트는 인자가 아니라 stdin(input)으로 간다 — 큰 프롬프트의 E2BIG 방지
+  assert.equal(c.input, 'P'); assert.ok(!c.args.includes('P'));
   assert.ok(!x.args.includes('--add-dir'));
   assert.throws(() => buildCommand({ ...spec, runner: 'bogus' }), /runner/);
   assert.ok(!buildCommand({ ...spec, runner: 'claude', model: undefined }).args.includes('--model'));
