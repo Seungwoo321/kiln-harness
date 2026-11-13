@@ -44,7 +44,8 @@ export function buildCatalog(caseDir) {
   const missingRoles = Object.keys(ROLE_HINT).filter((r) => byRole[r].length === 0);
   const catalog = { schemaVersion: 1, kind: 'ReferenceCatalog', caseId: registry.caseId, ...(registry.brief ? { brief: registry.brief } : {}), sources, byRole, missingRoles, warnings: missingRoles.map((r) => `${r}: ${COVERAGE_WARN[r]}`) };
   const statusFile = join(caseDir, 'design-spec-status.json');
-  if (existsSync(statusFile)) catalog.designSpec = { ...JSON.parse(readFileSync(statusFile, 'utf8')), summary: readDesignSpecs(caseDir, registry).map(s => ({ sourceId: s.sourceId, theme: s.render.theme, interactions: s.interactions.map(i => ({ id: i.id, kind: i.kind, items: i.items.map(x => x.label), openPolicy: i.openPolicy, initial: i.initial, reclick: i.reclick })), componentCandidates: s.elements.filter(e => e.componentCandidates?.length).map(e => ({ element: e.id, candidates: e.componentCandidates.map(c => c.baseline) })) })) };
+  // 요약은 프롬프트에 그대로 실린다. 요소별 컴포넌트 후보는 시안 하나에 수 MB 라 개수만 두고, 상세는 design-spec/<sourceId>.json 에서 읽는다.
+  if (existsSync(statusFile)) catalog.designSpec = { ...JSON.parse(readFileSync(statusFile, 'utf8')), summary: readDesignSpecs(caseDir, registry).map(s => ({ sourceId: s.sourceId, theme: s.render.theme, interactions: s.interactions.map(i => ({ id: i.id, kind: i.kind, items: i.items.map(x => x.label), openPolicy: i.openPolicy, initial: i.initial, reclick: i.reclick })), candidateElements: s.elements.filter(e => e.componentCandidates?.length).length })) };
   const patternFile = join(caseDir, 'existing-patterns.json');
   if (existsSync(patternFile)) catalog.existingPatterns = JSON.parse(readFileSync(patternFile, 'utf8')).candidates.length;
   catalog.digest = sha256(canonical(catalog));
