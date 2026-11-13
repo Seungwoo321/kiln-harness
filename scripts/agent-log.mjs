@@ -6,6 +6,7 @@
 //   --full 은 도구 결과를 줄이지 않고 다 보인다.
 import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 
 const tty = process.stdout.isTTY;
 const paint = (code) => (s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -70,22 +71,31 @@ export const isClaudeLog = (text) => text.trimStart().startsWith('{');
 export function createCodexRenderer({ full = false } = {}) {
   let mode = 'header'; let root = ''; let model = ''; let session = '';
   let command = []; let resultLines = 0; let trailingBlank = 0; let pendingExec = false; let previousBlank = false;
+  let blankLines = [];
+  let lastStatus = ''; let finished = false;
   const relative = (s) => root ? s.split(`${root}/`).join('') : s;
+  const result = (line) => {
+    resultLines += 1;
+    return full || resultLines <= 3 ? [`    ${dim(full ? line : one(relative(line), 150))}`] : [];
+  };
   const flush = () => {
     const out = [];
     if (pendingExec) {
       pendingExec = false;
       if (mode === 'result') {
-        resultLines += 1;
-        if (full || resultLines <= 3) out.push(dim('    exec'));
+        while (trailingBlank > 0) { out.push(...result(blankLines.shift())); trailingBlank -= 1; }
+        out.push(...result('exec'));
       } else if (mode !== 'user') out.push('exec');
     }
-    if (mode === 'command' && command.length) out.push('', `${bold('⏺')} ${cyan(`Bash(${full ? relative(command.join('\n')) : one(relative(command.join('\n')), 120)})`)}`);
+    if (mode === 'command' && command.length) out.push('', `${bold('⏺')} ${cyan(`Bash(${full ? command.join('\n') : one(relative(command.join('\n')), 120)})`)}`);
     if (mode === 'result') {
+      // Codex는 명령 결과 뒤에 빈 구분 줄 하나를 붙인다. 그 외 결과 줄은 보존한다.
+      const separator = blankLines.at(-1) === '' ? 1 : 0;
+      while (trailingBlank > separator) { out.push(...result(blankLines.shift())); trailingBlank -= 1; }
       if (!resultLines) out.push(dim('  ⎿ (출력 없음)'));
       if (!full && resultLines > 3) out.push(dim(`    … +${resultLines - 3}줄`));
     }
-    command = []; resultLines = 0; trailingBlank = 0; mode = 'text';
+    command = []; resultLines = 0; trailingBlank = 0; blankLines = []; mode = 'text';
     return out;
   };
   return {
@@ -112,7 +122,7 @@ export function createCodexRenderer({ full = false } = {}) {
         command.push(line); return [];
       }
       if (!literal && line === 'exec' && (mode !== 'result' || trailingBlank > 0)) { pendingExec = true; return []; }
-      if (/^(ERROR:|error:)/.test(line)) return [red(`✗ ${line}`)];
+      if (mode !== 'result' && /^(ERROR:|error:)/.test(line)) return [red(`✗ ${line}`)];
       if (!literal && (mode !== 'user' || (line === 'codex' && boundary)) && (mode !== 'result' || trailingBlank > 0) && (line === 'codex' || line === 'thinking' || line === 'tokens used')) {
         const out = flush();
         mode = ({ exec: 'command', codex: 'assistant', thinking: 'thinking', 'tokens used': 'tokens' })[line];
@@ -130,15 +140,24 @@ export function createCodexRenderer({ full = false } = {}) {
       }
       if (mode === 'user') return [];
       if (mode === 'result') {
-        if (!line.trim()) { trailingBlank += 1; return []; }
+        if (!line.trim()) { trailingBlank += 1; blankLines.push(line); return []; }
         const out = [];
         for (let n = 0; n <= trailingBlank; n += 1) {
-          resultLines += 1;
-          if (full || resultLines <= 3) out.push(`    ${dim(full ? (n === trailingBlank ? line : '') : one(relative(n === trailingBlank ? line : ''), 150))}`);
+          out.push(...result(n === trailingBlank ? line : blankLines[n]));
         }
-        trailingBlank = 0; return out;
+        trailingBlank = 0; blankLines = []; return out;
       }
-      if (mode === 'tokens' && /^[\d,]+$/.test(line.trim())) { mode = 'text'; return ['', dim(`끝 · 토큰 ${line.trim()}`)]; }
+      if (mode === 'tokens' && /^[\d,]+$/.test(line.trim())) { mode = 'text'; finished = true; return ['', dim(`끝 · 토큰 ${line.trim()}`)]; }
+      if (mode === 'assistant' || mode === 'text') {
+        try {
+          const status = JSON.parse(line);
+          if (['done', 'blocked'].includes(status.status) && typeof status.message === 'string' && Array.isArray(status.missingInputs)) {
+            const signature = JSON.stringify(status);
+            if (finished && signature === lastStatus) return [];
+            lastStatus = signature;
+          }
+        } catch { /* 일반 에이전트 메시지는 그대로 표시한다. */ }
+      }
       return [line];
     },
   };
@@ -147,7 +166,9 @@ export function createCodexRenderer({ full = false } = {}) {
 export function render(text, opts = {}) {
   if (!isClaudeLog(text)) {
     const renderer = createCodexRenderer(opts);
-    return [...text.split('\n').flatMap((l) => renderer.line(l)), ...renderer.flush()];
+    const lines = text.split('\n');
+    if (text.endsWith('\n')) lines.pop();
+    return [...lines.flatMap((l) => renderer.line(l)), ...renderer.flush()];
   }
   return text.split('\n').flatMap((l) => renderClaudeLine(l, opts));
 }
@@ -165,21 +186,23 @@ const title = (file) => `\n${bold(`━━ ${basename(file).replace(/^\.agent-|\.
 function follow(caseDir, start, opts) {
   let file = start; let offset = 0; let rest = ''; let claude = null;
   let codex = createCodexRenderer(opts);
+  let decoder = new StringDecoder('utf8');
   console.log(title(file));
   for (;;) {
     const size = existsSync(file) ? statSync(file).size : 0;
     if (size > offset) {
       const fd = openSync(file, 'r'); const buf = Buffer.alloc(size - offset); readSync(fd, buf, 0, buf.length, offset); closeSync(fd);
       offset = size;
-      const chunk = rest + buf.toString('utf8'); const parts = chunk.split('\n'); rest = parts.pop();
+      const chunk = rest + decoder.write(buf); const parts = chunk.split('\n'); rest = parts.pop();
       claude ??= isClaudeLog(chunk);
       for (const l of parts) for (const out of claude ? renderClaudeLine(l, opts) : codex.line(l)) console.log(out);
     }
     const newest = agentLogs(caseDir).at(-1);
     if (newest && newest !== file && statSync(newest).mtimeMs > statSync(file).mtimeMs) {
+      rest += decoder.end();
       if (rest) for (const out of claude ? renderClaudeLine(rest, opts) : codex.line(rest)) console.log(out);
       if (claude === false) for (const out of codex.flush()) console.log(out);
-      file = newest; offset = 0; rest = ''; claude = null; codex = createCodexRenderer(opts); console.log(title(file));
+      file = newest; offset = 0; rest = ''; claude = null; codex = createCodexRenderer(opts); decoder = new StringDecoder('utf8'); console.log(title(file));
     }
     sleep(1000);
   }
