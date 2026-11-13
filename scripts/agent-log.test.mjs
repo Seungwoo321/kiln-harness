@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderClaudeLine, render, toolLabel, createCodexRenderer } from './agent-log.mjs';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const j = (o) => JSON.stringify(o);
 
@@ -91,4 +96,47 @@ test('도구 없는 Codex 응답과 첫 도구 전 에이전트 메시지도 표
   for (const diagnostic of ['warning: Combined user instructions exceed the limit.', 'mcp startup: no servers']) {
     assert.match(render(log.replace('\n\ncodex', `\n\n${diagnostic}\ncodex`)).join('\n'), /No tools needed\./);
   }
+});
+
+test('full은 명령 경로와 결과의 긴 줄·빈 줄·공백을 보존한다', () => {
+  const command = '/bin/zsh -lc "cat /work/file" in /work';
+  const body = ['긴 결과'.repeat(100), '   ', '', 'error: literal output', '', ''];
+  const log = ['OpenAI Codex v1', 'workdir: /work', 'user', 'prompt', 'exec', command, ' succeeded in 1ms:', ...body, '', 'codex', 'done'].join('\n');
+  const out = render(log, { full: true });
+  assert.ok(out.includes(`⏺ Bash(${command})`));
+  const start = out.indexOf('  ⎿ succeeded in 1ms:') + 1;
+  assert.deepEqual(out.slice(start, start + body.length), body.map(line => `    ${line}`));
+  assert.doesNotMatch(out.join('\n'), /… \+\d+줄/);
+  assert.match(render(log).join('\n'), /… \+3줄/);
+  const unfinished = 'exec\n/bin/zsh -lc "printf" in /work\n succeeded in 1ms:\n   \n';
+  const whitespace = render(unfinished, { full: true });
+  assert.ok(whitespace.includes('       '));
+  assert.ok(!whitespace.some(line => line.includes('출력 없음')));
+});
+
+test('완료 토큰 뒤의 같은 최종 상태는 중복하지 않고 다른 상태와 도구 출력은 보존한다', () => {
+  const status = JSON.stringify({ status: 'done', message: '완료', missingInputs: [] });
+  const log = ['codex', status, 'tokens used', '123', status].join('\n');
+  assert.equal(render(log, { full: true }).filter(line => line === status).length, 1);
+  const different = JSON.stringify({ status: 'blocked', message: '입력 필요', missingInputs: ['spec'] });
+  assert.ok(render(log + '\n' + different).includes(different));
+  const result = ['exec', '/bin/zsh -lc "cat status" in /work', ' succeeded in 1ms:', status, status, '', 'codex', 'done'].join('\n');
+  assert.equal(render(result, { full: true }).filter(line => line === `    ${status}`).length, 2);
+});
+
+test('follow full은 읽기 사이에 나뉜 UTF-8 문자를 손상하지 않는다', { timeout: 10000 }, async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'kh-log-full-'));
+  const stages = join(dir, 'stages'); mkdirSync(stages);
+  const file = join(stages, '.agent-scope-1.log');
+  const word = Buffer.from('한글 결과');
+  writeFileSync(file, Buffer.concat([Buffer.from('exec\n/bin/zsh -lc "pwd" in /work\n succeeded in 1ms:\n'), word.subarray(0, 1)]));
+  const child = spawn(process.execPath, [new URL('./agent-log.mjs', import.meta.url).pathname, dir, '--follow', '--full']);
+  t.after(() => { child.kill(); rmSync(dir, { recursive: true, force: true }); });
+  let out = ''; child.stdout.on('data', data => { out += data.toString(); });
+  const waitFor = async text => { const deadline = Date.now() + 4000; while (!out.includes(text) && Date.now() < deadline) await delay(20); assert.ok(out.includes(text), out); };
+  await waitFor('succeeded in 1ms:');
+  appendFileSync(file, Buffer.concat([word.subarray(1), Buffer.from('\n\ncodex\n완료\ntokens used\n1\n')]));
+  await waitFor('끝 · 토큰 1');
+  assert.ok(out.includes('한글 결과'));
+  assert.ok(!out.includes('�'));
 });
