@@ -18,6 +18,7 @@ export const indexItems = (plan) => {
 };
 
 export const itemDigest = (item) => sha256(canonical(item)).slice(0, 12);
+const sectionOf = (plan, id) => SECTIONS.find((key) => (plan[key] ?? []).some((item) => item.id === id));
 
 export const readDecisions = (caseDir) => {
   const path = join(caseDir, 'decisions.json');
@@ -36,7 +37,7 @@ export function decide(caseDir, id, stance, note) {
   if (!STANCES.includes(stance)) throw new Error(`stance 는 ${STANCES.join('|')} 중 하나 (${stance})`);
   if (!note?.trim()) throw new Error('결정 내용(note)이 필요함');
   const rest = readDecisions(caseDir).filter((d) => d.id !== id);
-  write(caseDir, plan.caseId, [...rest, { id, stance, note: note.trim(), itemDigest: itemDigest(item) }]);
+  write(caseDir, plan.caseId, [...rest, { id, stance, note: note.trim(), section: sectionOf(plan, id), itemDigest: itemDigest(item) }]);
 }
 
 export function remove(caseDir, id) {
@@ -45,9 +46,13 @@ export function remove(caseDir, id) {
 }
 
 // 결정 시점과 항목 내용이 달라진 결정 — 재해석으로 항목이 바뀌었으니 다시 확인해야 한다.
+// 지적·질문·작업에 대한 결정은 재실행 때 같은 id 의 결정 기록(decisions)으로 이어받을 수 있다 — 그 기록이 결정 자체이므로 stale 이 아니다.
+// section 이 없는 이전 기록은 D- 가 아닌 id 를 결정 기록 밖의 항목에 대한 결정으로 본다(결정 기록의 id 는 D- 다).
 export function staleDecisions(caseDir, plan) {
   const items = indexItems(plan);
-  return readDecisions(caseDir).filter((d) => items.has(d.id) && d.itemDigest !== itemDigest(items.get(d.id)));
+  // shortcut: 이어받은 결정 기록이 그 뒤 다시 바뀌어도 stale 로 드러나지 않는다(이어받은 시점의 digest 가 없다 — decisions.json 은 사용자 입력이라 스크립트가 다시 쓰지 않는다). 이어받을 때 digest 를 남길 저장소가 생기면 그것과 비교한다.
+  const carried = (d) => (d.section ?? (d.id.startsWith('D-') ? 'decisions' : null)) !== 'decisions' && sectionOf(plan, d.id) === 'decisions';
+  return readDecisions(caseDir).filter((d) => items.has(d.id) && !carried(d) && d.itemDigest !== itemDigest(items.get(d.id)));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -65,6 +65,27 @@ test('결정은 기록되고, 없는 id 는 거부되며, 항목이 바뀌면 st
   assert.equal(JSON.parse(readFileSync(join(dir, 'decisions.json'), 'utf8')).decisions.length, 0);
 });
 
+test('지적·작업에 대한 결정을 같은 id 의 결정 기록으로 이어받으면 stale 이 아니고, 결정 기록에 직접 한 결정은 바뀌면 stale 이다', () => {
+  const dir = fixture();
+  const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
+  plan.findings[0].id = 'F-001'; writeFileSync(join(dir, 'workplan.json'), JSON.stringify(plan));
+  decide(dir, 'F-001', 'decided', '원본대로 한다');
+  assert.equal(JSON.parse(readFileSync(join(dir, 'decisions.json'), 'utf8')).decisions[0].section, 'findings');
+  const record = { id: 'F-001', kind: 'answered-by-source', statement: '원본대로 한다', rationale: '사용자 결정', sourceRefs: [] };
+  const rerun = { ...plan, findings: [], decisions: [record] };
+  assert.deepEqual(staleDecisions(dir, rerun), []);
+  const legacy = JSON.parse(readFileSync(join(dir, 'decisions.json'), 'utf8')); delete legacy.decisions[0].section; // section 없는 이전 기록
+  writeFileSync(join(dir, 'decisions.json'), JSON.stringify(legacy));
+  assert.deepEqual(staleDecisions(dir, rerun), []);
+  assert.equal(staleDecisions(dir, { ...plan, findings: [{ ...plan.findings[0], message: '바뀐 지적' }] }).length, 1, '지적이 지적으로 남아 바뀌면 stale');
+  decide(dir, 'T1', 'decided', '작업을 결정으로 둔다'); // 작업에 대한 결정도 결정 기록으로 이어받으면 stale 이 아니다
+  assert.deepEqual(staleDecisions(dir, { ...rerun, tasks: [], decisions: [record, { ...record, id: 'T1' }] }), []);
+  remove(dir, 'T1');
+  writeFileSync(join(dir, 'workplan.json'), JSON.stringify(rerun));
+  decide(dir, 'F-001', 'decided', '결정 기록을 다시 확인');
+  assert.equal(staleDecisions(dir, { ...rerun, decisions: [{ ...record, statement: '바뀐 결정' }] }).length, 1, '결정 기록에 직접 한 결정은 바뀌면 stale');
+});
+
 test('검토 HTML 은 결정적이고, id 앵커가 있고, 입력을 이스케이프한다', () => {
   const dir = fixture();
   decide(dir, 'F1', 'ask-design', '디자이너 확인');
