@@ -35,6 +35,29 @@ test('codex 처럼 JSON 이 아닌 로그는 마지막 줄을 보여 준다', ()
   assert.equal(createActivity(dir)(log).text, 'sed -n 1,40p foo.md');
 });
 
+test('Codex exec 명령을 분할 로그에서도 한 번씩 세고 결과 본문은 세지 않는다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kh-live-')); const log = join(dir, 'c.log');
+  const act = createActivity(dir);
+  writeFileSync(log, 'exec\n/bin/zsh -lc "pwd" in /work\n succeeded in 0ms:\n/work\nexec\n');
+  assert.equal(act(log, 'codex').toolCount, 1);
+  appendFileSync(log, '/bin/zsh -lc "false');
+  assert.equal(act(log, 'codex').toolCount, 1);
+  appendFileSync(log, '" in /work\n exited 1 in 0ms:\nexec\nplain output\n');
+  const state = act(log, 'codex');
+  assert.equal(state.toolCount, 2);
+  assert.deepEqual(state.tools, ['Bash /bin/zsh -lc "pwd" in /work', 'Bash /bin/zsh -lc "false" in /work']);
+  assert.equal(act(log, 'codex').toolCount, 2);
+});
+
+test('Codex ticker가 실제 도구 횟수를 진행 신호에 표시한다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kh-live-')); const log = join(dir, 'c.log');
+  writeFileSync(log, 'exec\n/bin/zsh -lc "pwd" in /work\n');
+  const out = []; const live = createLive({ isTTY: false, write: (s) => out.push(s) });
+  const tk = createTicker({ live, root: dir, overview: () => ({ stages: [], totals: {} }) });
+  tk.tick({ stage: 'scope', attempt: 1, max: 3, cfg: { runner: 'codex' }, logFile: log, elapsedSec: 61 });
+  assert.match(out[0], /도구 1회/);
+});
+
 test('TTY 가 아니면 블록을 그리지 않고 1분마다 한 줄 신호만 낸다', () => {
   const out = []; const live = createLive({ isTTY: false, write: (s) => out.push(s) });
   const dir = mkdtempSync(join(tmpdir(), 'kh-live-'));

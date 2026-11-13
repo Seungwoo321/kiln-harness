@@ -65,7 +65,7 @@ const describe = (name, input = {}, root) => {
 
 export function createActivity(root) {
   const states = new Map();
-  return (logFile) => {
+  return (logFile, runner = 'claude') => {
     let st = states.get(logFile);
     if (!st) { st = { offset: 0, partial: '', tools: [], toolCount: 0, outTokens: 0, text: '' }; states.set(logFile, st); }
     let size = 0;
@@ -83,7 +83,19 @@ export function createActivity(root) {
           if (!line.trim()) continue;
           let d = null;
           if (line.startsWith('{')) { try { d = JSON.parse(line); } catch { d = null; } }
-          if (!d) { st.text = line.trim(); continue; }
+          if (!d) {
+            if (runner === 'codex') {
+              // exec 헤더 다음의 명령만 센다. 결과 본문에 있는 exec 문자열은 호출이 아니다.
+              if (st.pendingExec && /^(?:\/|[A-Za-z]:\\)\S+\s+\S/.test(line)) {
+                st.toolCount += 1;
+                st.tools.push(`Bash ${line.trim()}`);
+                if (st.tools.length > 3) st.tools.shift();
+              }
+              st.pendingExec = line === 'exec';
+            }
+            st.text = line.trim();
+            continue;
+          }
           if (d.type === 'assistant') {
             st.outTokens += d.message?.usage?.output_tokens ?? 0;
             for (const c of d.message?.content ?? []) {
@@ -104,7 +116,7 @@ export function createTicker({ live, root, overview }) {
   let lastBeat = 0;
   return {
     tick(t) {
-      const st = activity(t.logFile);
+      const st = activity(t.logFile, t.cfg.runner);
       const o = overview();
       const head = `${t.stage} 시도 ${t.attempt}/${t.max} · ${t.cfg.runner}/${t.cfg.model ?? '기본'}${t.cfg.effort ? `/${t.cfg.effort}` : ''}`;
       if (!live.tty) {
