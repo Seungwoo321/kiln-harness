@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runPipeline, loadConfig } from './lib/pipeline.mjs';
+import { runPipeline, loadConfig, buildPrompt } from './lib/pipeline.mjs';
 import { buildCatalog, catalogText } from './catalog.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';
@@ -395,4 +395,13 @@ test('디자인 시스템 역할: export·props 인덱스를 만들고 카탈로
   assert.ok(!c.missingRoles.includes('design-system'));
   const text = catalogText(c);
   assert.ok(text.includes('ds (design-system, code)') && text.includes('인덱스로 후보 부품') && text.includes('variants'));
+});
+
+test('렌더 증거는 프롬프트에 본문 대신 파일 위치만 싣는다(큰 시안에서 E2BIG·토큰 초과 방지)', () => {
+  const big = Array.from({ length: 5000 }, (_, i) => ({ element: `E${i}`, candidates: ['Button', 'Chip'] }));
+  const catalog = { sources: [], warnings: [], designSpec: { status: 'passed', sources: [{ sourceId: 'd', elements: 5000, interactions: 1 }], summary: [{ sourceId: 'd', interactions: [{ id: 'I1' }], candidateElements: big.length, componentCandidates: big }] } };
+  const p = buildPrompt('scope', { catalog, feedback: [], lessons: [] });
+  assert.ok(p.includes('design-spec/d.json'));
+  assert.ok(!p.includes('E4999'));
+  assert.ok(Buffer.byteLength(p) < 20000);
 });

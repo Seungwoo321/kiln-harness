@@ -251,7 +251,9 @@ export function buildPrompt(stage, ctx) {
   const head = `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다(다른 폴더는 절대경로·git -C 로 읽는다) — 바뀌면 결과 파일 쓰기가 거부된다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
   const design = ctx.catalog?.designSpec;
-  const evidence = design ? `\n\n[렌더 증거]\ndesign-spec: ${design.status}${design.reason ? ` (${design.reason})` : ''}. ${JSON.stringify(design.sources ?? [])}\n${JSON.stringify(design.summary ?? [])}\n전체 요소·계산 스타일: design-spec/<sourceId>.json. 컴포넌트 기준: component-baseline.json. 기존 UI 사용례: existing-patterns.json (${ctx.catalog.existingPatterns ?? 0}개, 적합성은 코드로 확인). 출처별 수용 정책과 v3 시안 규격을 적용한다.` : '';
+  // 렌더 증거는 본문을 싣지 않고 파일 위치만 준다 — 다른 원본처럼 에이전트가 읽는다(본문을 실으면 큰 시안에서 프롬프트가 수 MB 가 된다).
+  const specFiles = (design?.summary ?? []).map((s) => `design-spec/${s.sourceId}.json`);
+  const evidence = design ? `\n\n[렌더 증거]\ndesign-spec: ${design.status}${design.reason ? ` (${design.reason})` : ''}. ${JSON.stringify(design.sources ?? [])}\n렌더 결과 파일(요소·계산 스타일·상호작용·요소별 컴포넌트 후보): ${specFiles.length ? specFiles.join(', ') : 'design-spec/<sourceId>.json'}. 컴포넌트 기준: component-baseline.json. 기존 UI 사용례: existing-patterns.json (${ctx.catalog.existingPatterns ?? 0}개, 적합성은 코드로 확인). 출처별 수용 정책과 v3 시안 규격을 적용한다.` : '';
   const tail = lin + evidence + levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
   if (stage === 'scope') return `${head}\n결과: stages/scope.json${tail}`;
   if (stage === 'interpret') {
