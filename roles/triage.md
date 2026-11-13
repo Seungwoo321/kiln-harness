@@ -6,7 +6,7 @@
 
 <input_contract>
 - `delta.json` — 이전 실행(`previous`) 대비 `added`·`changed`·`removed` 입력과 `candidateIds`(바뀌거나 사라진 입력을 근거로 든 이전 계획서의 항목 id).
-- 이전 실행 스냅샷: `history/<previous>/workplan.json`(이전 계획서)·`scope.json`·`critic.json`(이전 지적). 현재 입력은 `sources.json`·`extract/*.json`·`references.json`, 원문과 코드.
+- 이전 실행 스냅샷: `history/<previous>/workplan.json`(이전 계획서)·`scope.json`·`critic.json`(이전 비평 원문 — 확정된 지적과 그 id 는 `workplan.json` 의 `findings`). 현재 입력은 `sources.json`·`extract/*.json`·`references.json`, 원문과 코드.
 - 바뀐 입력은 반드시 열어 이전 계획서와 대조한다. 바뀌지 않은 입력은 다시 읽을 필요가 없다. `decisions.json` 이 이전 실행 뒤에 바뀌었으면 그 결정이 가리키는 항목도 영향 항목이다.
 </input_contract>
 

@@ -206,4 +206,7 @@ test('증분 게이트·지적 이월: 영향 밖 항목 보존, 비평 범위, 
   const m = mergeFindings(prev, [{ target: 'R3', message: 'n' }], scope, new Set(['R1', 'R2', 'R3']), '002-y');
   assert.deepEqual(m.findings.map((f) => [f.id, f.target, f.carriedFrom]), [['F-002', 'R2', '001-x'], ['F-004', 'R3', undefined]]);
   assert.deepEqual(m.report, { carried: [{ id: 'F-002', carriedFrom: '001-x' }], resolved: ['F-001', 'F-003'], raised: ['F-004'] });
+  // 사용자 결정을 이어받은 계획서 항목의 F- id 는 새 지적이 쓰지 않고, 그 id 의 이전 지적은 이월하지 않고 해소로 기록한다.
+  const d = mergeFindings([...prev, { id: 'F-005', target: 'R2' }], [{ target: 'R3', message: 'n' }], scope, new Set(['R1', 'R2', 'R3']), '002-y', new Set(['F-005', 'F-010', 'R1']));
+  assert.deepEqual(d.report, { carried: [{ id: 'F-002', carriedFrom: '001-x' }], resolved: ['F-001', 'F-003', 'F-005'], raised: ['F-011'] });
 });

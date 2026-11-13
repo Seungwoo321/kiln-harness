@@ -24,7 +24,7 @@
 | S3 scope | 에이전트 `roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다 |
 | S4 interpret | 에이전트 `roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
 | S5 validate | 스크립트 | 후보 계획서 → 위반 목록 (아래 게이트). 위반은 S4 의 다음 시도에 주입된다 |
-| S6 critic | 에이전트 `roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재 |
+| S6 critic | 에이전트 `roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재. 지적 id 는 스크립트가 계획서의 기존 id·이전 지적과 겹치지 않게 매긴다 |
 | S0 triage | 스크립트 + 에이전트 `roles/triage.md` | 입력이 바뀐 재실행에서 이전 스냅샷과 현재 입력 → `delta.json`·`triage.json` (skip·incremental·rewrite, 영향 id). 가드레일이 먼저 rewrite 를 강제한다 (실행 구조 참조) |
 | S7 render | 스크립트 | `WORKPLAN.md` · `WORKPLAN.html`(전체 문서) · `review.html`(변경 유형·지적·결정 화면) |
 | S8 verify | 스크립트 + 에이전트 `roles/conformance.md` | 구현 URL·코드 → `conformance-facts.json` → LLM 판정 → `conformance.json`·`conformance-brief.md`·review.html의 시안 적합성 절 |
@@ -60,7 +60,7 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
   - 다음이면 `triage` 를 부르지 않고 `rewrite` 다: 바뀐 입력 비율이 `triage.maxChangedRatio`(기본 0.5)를 넘음 · 삭제된 입력이 `triage.maxRemoved`(기본 1)건을 넘음 · `plan`·`design` 입력(범위 경계)이 추가·교체·삭제됨 · 입력 파일은 같고 등록 정보만 바뀜. 후속 사례(`previous`)와 검토 수준 변경도 대상이 아니다. 기준값은 `kh.config.json` 의 `triage` 로 덮는다.
   - `incremental` 인데 `impactIds` 가 비었거나 이전 계획서에 없는 id 이면, 바뀐 입력을 근거로 든 항목이 `impactIds` 에도 이유를 단 `kept` 에도 없으면 판정이 통과하지 못한다. 판정 단계가 끝내 통과하지 못하면 `rewrite` 로 돌아가고 사유를 남긴다. 결정(`decisions.json`)이 바뀐 실행은 `skip` 할 수 없다.
   - 증분 해석은 `scope.json` 과 기존 계획서를 이어받는다. 게이트는 `impactIds` 밖 항목이 정규형(digest) 단위로 그대로인지 확인한다. 영향 항목과 새 항목만 바뀔 수 있다.
-  - 증분 비평은 영향·신규 항목만 다룬다(질문 판정·지적 대상·검토 수준 8 이상의 화면 대조). 범위 밖 항목에 대한 이전 지적은 `carriedFrom: <최초 run>` 을 달아 이월되고, 범위 안의 이전 지적은 다시 지적되지 않으면 해소로 기록된다(`triage.json` 의 `findings.carried·resolved·raised`). 새 지적의 id 는 이월 id 뒤로 이어진다.
+  - 증분 비평은 영향·신규 항목만 다룬다(질문 판정·지적 대상·검토 수준 8 이상의 화면 대조). 범위 밖 항목에 대한 이전 지적은 `carriedFrom: <최초 run>` 을 달아 이월되고, 범위 안의 이전 지적은 다시 지적되지 않으면 해소로 기록된다(`triage.json` 의 `findings.carried·resolved·raised`). 이전 지적의 id 를 계획서의 다른 항목(사용자 결정을 이어받은 결정)이 가졌으면 해소로 기록한다. 새 지적의 id 는 이전 지적·계획서 항목이 쓴 F- id 뒤로 이어진다.
   - 증분 시도가 통과하지 못하면 전체 루프의 다음 시도가 전면 재작성이다. `--rewrite`(또는 `--force`)는 판정 없이 항상 전면 재작성 경로를 강제한다.
   - 스냅샷은 성공한 실행마다 하나(계획서가 같으면 만들지 않음)이며 최근 `triage.keepRuns`(기본 10)개만 둔다.
 - **권한:** 에이전트는 읽기와 `stages/` 아래 쓰기만 한다. 원본 해시가 바뀌면 그 시도는 실패다.

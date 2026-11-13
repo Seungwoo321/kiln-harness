@@ -124,13 +124,18 @@ export function criticScope(before, after, impact) {
   return { ids, surfaces };
 }
 
+// 지적 id 는 스크립트가 매긴다 — 이미 쓰인 F- id(이전 지적, 사용자 결정을 이어받은 계획서 항목 등) 뒤로 이어 붙여 겹치지 않게 한다.
+export function numberFindings(fresh, taken) {
+  let n = Math.max(0, ...[...taken].map((id) => Number(String(id).match(/^F-(\d+)$/)?.[1] ?? 0)));
+  return fresh.map((f) => ({ ...f, id: `F-${String(++n).padStart(3, '0')}` }));
+}
+
 // 지적 이월: 비평 범위 밖 항목에 대한 이전 지적은 항목이 그대로이므로 해소되지 않은 것이다 — 최초 발생 run 을 남기며 이월한다.
-// 비평 범위 안의 이전 지적은 새 비평이 다시 판단하므로, 다시 지적되지 않으면 해소된 것으로 기록한다. 새 지적의 id 는 이월 id 뒤로 이어 붙인다.
-export function mergeFindings(prevFindings, fresh, scope, planIds, previousRunId) {
-  const carried = prevFindings.filter((f) => !scope.ids.has(f.target) && planIds.has(f.target)).map((f) => ({ ...f, carriedFrom: f.carriedFrom ?? previousRunId }));
-  const used = [...carried, ...prevFindings].map((f) => Number(String(f.id).match(/(\d+)$/)?.[1] ?? 0));
-  let n = Math.max(0, ...used);
-  const raised = fresh.map((f) => { n += 1; return { ...f, id: `F-${String(n).padStart(3, '0')}` }; });
+// 비평 범위 안의 이전 지적은 새 비평이 다시 판단하므로, 다시 지적되지 않으면 해소된 것으로 기록한다. 이전 지적의 id 를 계획서의 다른 항목(taken —
+// 사용자 결정을 이어받은 decisions 등)이 가졌으면 그 항목으로 정리된 것이므로 이월하지 않고 해소로 기록한다. 새 지적의 id 는 쓰인 id 뒤로 이어 붙인다.
+export function mergeFindings(prevFindings, fresh, scope, planIds, previousRunId, taken = new Set()) {
+  const carried = prevFindings.filter((f) => !scope.ids.has(f.target) && planIds.has(f.target) && !taken.has(f.id)).map((f) => ({ ...f, carriedFrom: f.carriedFrom ?? previousRunId }));
+  const raised = numberFindings(fresh, [...prevFindings.map((f) => f.id), ...taken]);
   const carriedIds = new Set(carried.map((f) => f.id));
   return { findings: [...carried, ...raised], report: { carried: carried.map((f) => ({ id: f.id, carriedFrom: f.carriedFrom })), resolved: prevFindings.filter((f) => !carriedIds.has(f.id)).map((f) => f.id), raised: raised.map((f) => f.id) } };
 }

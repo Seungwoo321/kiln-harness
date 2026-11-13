@@ -16,7 +16,7 @@
 ```json
 { "questionVerdicts": [{ "id": "Q-01", "verdict": "keep|demote|drop", "reason": "drop 일 때", "decision": { "kind": "answered-by-source|sources-agree|single-source", "statement": "", "rationale": "", "sourceRefs": [{ "sourceId": "", "locator": "" }] } }],
   "findings": [{
-  "id": "F-001", "severity": "high|medium|low", "origin": "plan|design|code|contract|workplan",
+  "severity": "high|medium|low", "origin": "plan|design|code|contract|workplan",
   "target": "<계획서의 항목 id>", "message": "무엇이 어떻게 불완전한가", "evidence": "근거(원본 위치·코드 위치)",
   "recommendation": "어떻게 하면 되는가",
   "stance": "follow-existing|re-review|ask-plan|ask-design|ask-backend"
@@ -28,6 +28,7 @@
   - `demote` — **원본이 이미 답했다**(기획 HTML 과 디자인이 같음 · 원본이 명시함 · 한쪽에만 있어 그쪽을 따름). `decision`(kind·statement·rationale·원본 위치 sourceRefs)을 달아 질문을 결정으로 내린다.
   - `drop` — 중복이거나 내용이 없다(`reason`). 추론 항목이 가리키는 notice 는 drop 할 수 없다.
   근거 없이 '없다/다르다'고 주장하는 질문을 그대로 두지 않는다. 이전 결정과의 충돌 질문은 `keep` 이다.
+- 지적의 `id` 는 쓰지 않는다 — 스크립트가 계획서의 기존 id(사용자 결정을 이어받은 결정 포함)와 겹치지 않게 매긴다. 그래서 지적 본문에서 다른 지적을 id 로 가리키지 않는다.
 - `target` 은 계획서에 실제로 있는 id 여야 한다. `evidence` 에는 원본의 위치를 적는다.
 - `stance`: 기존 구현 패턴이 이미 답을 주면 `follow-existing`, 근거가 모호해 다시 따져야 하면 `re-review`, 기획·디자인·백엔드 담당자가 답해야 하면 `ask-*`.
 - 확인한 근거 없는 지적은 쓰지 않는다. 지적할 것이 정말 없으면 빈 배열이다.
