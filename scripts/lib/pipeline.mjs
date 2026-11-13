@@ -16,7 +16,7 @@ import { extract } from '../extract.mjs';
 import { validate } from '../validate.mjs';
 import { render } from '../render.mjs';
 import { renderReview } from '../render-review.mjs';
-import { readDecisions } from '../decide.mjs';
+import { readDecisions, indexItems } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
@@ -24,7 +24,7 @@ import { readDesignSpecs } from './design-policy.mjs';
 import { BLOCKING, judgmentErrors, groundJudgments, conformanceBrief } from './conformance.mjs';
 import { seal } from '../design-spec.mjs';
 import { appendConformanceReview } from './conformance-view.mjs';
-import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buildDelta, guardrails, triageViolations, preservedViolations, criticScope, mergeFindings } from './triage.mjs';
+import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buildDelta, guardrails, triageViolations, preservedViolations, criticScope, mergeFindings, numberFindings } from './triage.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STAGES = ['scope', 'interpret', 'critic'];
@@ -212,8 +212,10 @@ export function criticGate(dir, registry, plan, inc = null) {
   let findings = crit.findings.filter((f) => !gone.has(f.target));
   let coverage = crit.coverage;
   let report = null;
-  if (inc) {
-    ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId));
+  const taken = new Set(indexItems(applied).keys()); // 지적 id 는 비평이 아니라 스크립트가 계획서의 기존 id 와 겹치지 않게 매긴다
+  if (!inc) findings = numberFindings(findings, taken);
+  else {
+    ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId, taken));
     const planSurfaces = new Set((plan.surfaces ?? []).map((x) => x.id));
     coverage = [...(inc.prev.coverage ?? []).filter((c) => !inc.scope.surfaces.has(c.surface) && planSurfaces.has(c.surface)), ...(crit.coverage ?? [])];
   }
@@ -263,7 +265,7 @@ export function buildPrompt(stage, ctx) {
       : ctx.basePlan ? '\n\n기존 계획서가 workplan.json 에 있다. 이를 바탕으로, 위 결정이 가리키는 항목과 그에 영향받는 항목만 고치고 나머지는 그대로 둔다.' : '';
     return `${head}\n범위: stages/scope.json. 계획서 형식: ${join(ROOT, 'docs', 'workplan-format.md')} (v2·v3 절 포함).\n결과: stages/workplan.draft.json${base}${decisions}${tail}`;
   }
-  const incCritic = ctx.incremental ? `\n\n[증분 비평] 영향·신규 항목만 새로 비평한다: ${[...ctx.incremental.scope.ids].join(', ')}. findings 의 target 과 questionVerdicts 는 이 범위 안의 항목만 쓴다(범위 밖 질문은 판정하지 않는다). 범위 밖 항목에 대한 이전 지적은 스크립트가 이월하므로 다시 쓰지 않는다 — 이월되는 이전 지적과 겹치는 새 지적도 쓰지 않는다. 이전 지적: history/${ctx.incremental.previousRunId}/critic.json.${ctx.incremental.scope.surfaces.size ? ` 화면 대조(coverage)는 ${[...ctx.incremental.scope.surfaces].join(', ')} 만 쓴다.` : ''}` : '';
+  const incCritic = ctx.incremental ? `\n\n[증분 비평] 영향·신규 항목만 새로 비평한다: ${[...ctx.incremental.scope.ids].join(', ')}. findings 의 target 과 questionVerdicts 는 이 범위 안의 항목만 쓴다(범위 밖 질문은 판정하지 않는다). 범위 밖 항목에 대한 이전 지적은 스크립트가 이월하므로 다시 쓰지 않는다 — 이월되는 이전 지적과 겹치는 새 지적도 쓰지 않는다. 이전 지적: history/${ctx.incremental.previousRunId}/workplan.json 의 findings.${ctx.incremental.scope.surfaces.size ? ` 화면 대조(coverage)는 ${[...ctx.incremental.scope.surfaces].join(', ')} 만 쓴다.` : ''}` : '';
   return `${head}\n검토 대상: stages/workplan.checked.json (해석 게이트를 통과한 계획서). 사용자 결정: decisions.json (없으면 결정 없음). 이전 사례 기록이 있으면 lineage.json.\n결과: stages/critic.json — findings 와 questionVerdicts(모든 질문)${incCritic}${tail}`;
 }
 

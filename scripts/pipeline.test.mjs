@@ -10,6 +10,7 @@ import { extract } from './extract.mjs';
 import { execFileSync } from 'node:child_process';
 import { buildCommand, cleanEnv, which } from './lib/runner.mjs';
 import { decide } from './decide.mjs';
+import { validate } from './validate.mjs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -140,6 +141,25 @@ test('결정만 바뀌면 범위는 이어받고 기존 계획서 위에서 해�
   const interp = agent.calls.find((c) => c.stage === 'interpret');
   assert.ok(interp.prompt.includes('기존 계획서가 workplan.json') && interp.prompt.includes('R1 (follow-existing)'));
   assert.ok(Array.isArray(JSON.parse(readFileSync(join(dir, 'run-status.json'), 'utf8')).changedIds));
+});
+
+test('사용자 결정이 이어받은 이전 지적 id 와 새 비평의 id 가 겹쳐도, 결정은 그대로 두고 새 지적에 겹치지 않는 id 를 매긴다(재시도 포함)', () => {
+  const { dir } = fixture(); assert.equal(go(dir, fakeAgent()).ok, true);
+  decide(dir, 'F-001', 'decided', '원본대로 한다');
+  const before = readFileSync(join(dir, 'decisions.json'), 'utf8');
+  const kept = { id: 'F-001', kind: 'answered-by-source', statement: '원본대로 한다', rationale: '사용자 결정', sourceRefs: ref };
+  const agent = fakeAgent({
+    interpret: () => ({ ...draftOut(), decisions: [kept] }),
+    critic: (n) => ({ findings: [{ ...criticOut().findings[0], ...(n === 1 ? { evidence: '' } : {}) }] }), // 1회차는 다른 위반으로 재시도, 2회차도 비평은 F-001 을 쓴다
+  });
+  const r = go(dir, agent, { force: true });
+  assert.equal(r.ok, true);
+  assert.equal(agent.calls.filter((c) => c.stage === 'critic').length, 2);
+  const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
+  assert.deepEqual(plan.decisions, [kept]);
+  assert.deepEqual(plan.findings.map((f) => [f.id, f.target, f.message]), [['F-002', 'R1', 'm']]);
+  assert.equal(readFileSync(join(dir, 'decisions.json'), 'utf8'), before);
+  assert.ok(validate(dir, { ...plan, findings: [{ ...plan.findings[0], id: 'F-001' }] }).includes('findings[0]: id 중복 — F-001'), '실제 중복 id 검사는 그대로');
 });
 
 test('비평의 지적에 근거(evidence)가 없으면 막힌다', () => {

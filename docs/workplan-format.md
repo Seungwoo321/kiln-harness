@@ -54,7 +54,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 | 절 | 필드 |
 |---|---|
 | `tasks[].changeKind` | `new-page`·`new-menu`·`ds-component-new`·`ds-component-edit`·`feature-change`(기존 피처의 배치·컴포넌트 수정)·`feature-copy`(문구)·`i18n`·`api-wiring` — 모든 task 가 하나를 가진다 |
-| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` `carriedFrom?` — 입력 산출물이나 계획서의 불완전한 부분. `carriedFrom` 은 증분 실행에서 이월된 지적이 처음 나온 실행(`history/<runId>`)이다 |
+| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` `carriedFrom?` — 입력 산출물이나 계획서의 불완전한 부분. `id` 는 스크립트가 계획서의 다른 id 와 겹치지 않게 매긴다. `carriedFrom` 은 증분 실행에서 이월된 지적이 처음 나온 실행(`history/<runId>`)이다 |
 
 `stance` 는 권고다: `follow-existing`(기존 패턴을 따른다) · `re-review`(다시 검토한다) · `ask-plan`·`ask-design`·`ask-backend`(담당자에게 확인한다).
 
