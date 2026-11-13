@@ -66,8 +66,89 @@ export function renderClaudeLine(line, { full = false } = {}) {
 
 export const isClaudeLog = (text) => text.trimStart().startsWith('{');
 
+// Codex 명령은 여러 줄일 수 있으므로 follow의 읽기 사이에도 명령·결과 상태를 유지한다.
+export function createCodexRenderer({ full = false } = {}) {
+  let mode = 'header'; let root = ''; let model = ''; let session = '';
+  let command = []; let resultLines = 0; let trailingBlank = 0; let pendingExec = false; let previousBlank = false;
+  const relative = (s) => root ? s.split(`${root}/`).join('') : s;
+  const flush = () => {
+    const out = [];
+    if (pendingExec) {
+      pendingExec = false;
+      if (mode === 'result') {
+        resultLines += 1;
+        if (full || resultLines <= 3) out.push(dim('    exec'));
+      } else if (mode !== 'user') out.push('exec');
+    }
+    if (mode === 'command' && command.length) out.push('', `${bold('⏺')} ${cyan(`Bash(${full ? relative(command.join('\n')) : one(relative(command.join('\n')), 120)})`)}`);
+    if (mode === 'result') {
+      if (!resultLines) out.push(dim('  ⎿ (출력 없음)'));
+      if (!full && resultLines > 3) out.push(dim(`    … +${resultLines - 3}줄`));
+    }
+    command = []; resultLines = 0; trailingBlank = 0; mode = 'text';
+    return out;
+  };
+  return {
+    flush,
+    line(line, literal = false) {
+      const boundary = previousBlank; previousBlank = !line.trim();
+      if (mode === 'user' && /^(warning:|mcp startup:)/.test(line)) {
+        mode = 'text'; return [dim(line)];
+      }
+      if (pendingExec) {
+        pendingExec = false;
+        if (/^(?:\/|[A-Za-z]:\\)\S+\s+\S/.test(line)) {
+          const out = flush(); mode = 'command'; command.push(line); return out;
+        }
+        return [...this.line('exec', true), ...this.line(line, literal)];
+      }
+      if (mode === 'command') {
+        if (/^ (?:succeeded in|exited \d+ in) .+:$/.test(line)) {
+          const out = flush(); mode = 'result';
+          const failed = /^ exited [1-9]\d* in /.test(line);
+          out.push((failed ? red : dim)(`  ⎿ ${failed ? '✗ ' : ''}${line.trim()}`));
+          return out;
+        }
+        command.push(line); return [];
+      }
+      if (!literal && line === 'exec' && (mode !== 'result' || trailingBlank > 0)) { pendingExec = true; return []; }
+      if (/^(ERROR:|error:)/.test(line)) return [red(`✗ ${line}`)];
+      if (!literal && (mode !== 'user' || (line === 'codex' && boundary)) && (mode !== 'result' || trailingBlank > 0) && (line === 'codex' || line === 'thinking' || line === 'tokens used')) {
+        const out = flush();
+        mode = ({ exec: 'command', codex: 'assistant', thinking: 'thinking', 'tokens used': 'tokens' })[line];
+        if (mode === 'assistant') out.push('', bold('⏺ 에이전트'));
+        if (mode === 'thinking') out.push('', dim('✻ 생각'));
+        return out;
+      }
+      if (mode === 'header') {
+        if (line.startsWith('workdir: ')) root = line.slice(9);
+        if (line.startsWith('model: ')) model = line.slice(7);
+        if (line.startsWith('session id: ')) session = line.slice(12);
+        if (line === 'user') { mode = 'user'; return [dim(`세션 ${session || '-'} · 모델 ${model || '-'} · cwd ${root || '-'}`)]; }
+        if (/^(OpenAI Codex |--------|workdir:|model:|provider:|approval:|sandbox:|reasoning |session id:)/.test(line)) return [];
+        return line.trim() ? [line] : [];
+      }
+      if (mode === 'user') return [];
+      if (mode === 'result') {
+        if (!line.trim()) { trailingBlank += 1; return []; }
+        const out = [];
+        for (let n = 0; n <= trailingBlank; n += 1) {
+          resultLines += 1;
+          if (full || resultLines <= 3) out.push(`    ${dim(full ? (n === trailingBlank ? line : '') : one(relative(n === trailingBlank ? line : ''), 150))}`);
+        }
+        trailingBlank = 0; return out;
+      }
+      if (mode === 'tokens' && /^[\d,]+$/.test(line.trim())) { mode = 'text'; return ['', dim(`끝 · 토큰 ${line.trim()}`)]; }
+      return [line];
+    },
+  };
+}
+
 export function render(text, opts = {}) {
-  if (!isClaudeLog(text)) return text.split('\n'); // codex exec 출력은 이미 사람이 읽는 형식이다
+  if (!isClaudeLog(text)) {
+    const renderer = createCodexRenderer(opts);
+    return [...text.split('\n').flatMap((l) => renderer.line(l)), ...renderer.flush()];
+  }
   return text.split('\n').flatMap((l) => renderClaudeLine(l, opts));
 }
 
@@ -83,6 +164,7 @@ const title = (file) => `\n${bold(`━━ ${basename(file).replace(/^\.agent-|\.
 
 function follow(caseDir, start, opts) {
   let file = start; let offset = 0; let rest = ''; let claude = null;
+  let codex = createCodexRenderer(opts);
   console.log(title(file));
   for (;;) {
     const size = existsSync(file) ? statSync(file).size : 0;
@@ -91,10 +173,14 @@ function follow(caseDir, start, opts) {
       offset = size;
       const chunk = rest + buf.toString('utf8'); const parts = chunk.split('\n'); rest = parts.pop();
       claude ??= isClaudeLog(chunk);
-      for (const l of parts) for (const out of claude ? renderClaudeLine(l, opts) : [l]) console.log(out);
+      for (const l of parts) for (const out of claude ? renderClaudeLine(l, opts) : codex.line(l)) console.log(out);
     }
     const newest = agentLogs(caseDir).at(-1);
-    if (newest && newest !== file && statSync(newest).mtimeMs > statSync(file).mtimeMs) { file = newest; offset = 0; rest = ''; claude = null; console.log(title(file)); }
+    if (newest && newest !== file && statSync(newest).mtimeMs > statSync(file).mtimeMs) {
+      if (rest) for (const out of claude ? renderClaudeLine(rest, opts) : codex.line(rest)) console.log(out);
+      if (claude === false) for (const out of codex.flush()) console.log(out);
+      file = newest; offset = 0; rest = ''; claude = null; codex = createCodexRenderer(opts); console.log(title(file));
+    }
     sleep(1000);
   }
 }
