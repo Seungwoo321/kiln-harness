@@ -35,6 +35,12 @@
       "model": "sonnet",
       "effort": "high",
       "session": "fresh"
+    },
+    "second-opinion": {
+      "runner": "claude",
+      "model": "opus",
+      "effort": "high",
+      "session": "fresh"
     }
   },
   "conformance": {
@@ -48,5 +54,9 @@
     "maxChangedRatio": 0.5,
     "maxRemoved": 1,
     "keepRuns": 10
+  },
+  "review": {
+    "secondOpinion": false,
+    "bulkAcceptThreshold": 5
   }
 }

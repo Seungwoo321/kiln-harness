@@ -79,10 +79,10 @@ Claude의 rate limit 줄과 Codex의 입력 프롬프트는 숨긴다. Codex 로
 node scripts/run.mjs cases/<case>                  # 한 번에: 등록 → 추출 → 카탈로그 → 범위 → 해석 → 검증 → 비평 → 렌더
 node scripts/run.mjs cases/<case> --attempts 3 --loops 1   # 단계당 재시도 3회, 전체 재시작 1회(처음 돌릴 때 비용 상한)
 node scripts/run.mjs cases/<case> --level 3               # 검토 수준 0~10 (기본 5). 낮을수록 끼워 맞춰 구현하고 구현 불가만 묻는다, 높을수록 체계적으로 검증한다
-node scripts/decide.mjs cases/<case> <id> <stance> "<결정>"  # 검토 화면의 id 에 결정을 남긴다 → run.mjs 를 다시 돌리면 반영
+node scripts/decide.mjs cases/<case> <id> <stance> "<결정>" --origin <출처> [--reason "<이유>"]  # 결정과 출처(새로 정함·권장안 채택/수정/기각)를 남긴다 → run.mjs 를 다시 돌리면 반영
 node scripts/run.mjs cases/<case> --rewrite             # 입력이 바뀌어도 증분 판정 없이 항상 전면 재작성
 node scripts/export-goal.mjs cases/<case> --out goal.json  # 승인된 분석을 실행용 목표(JSON)로 내보낸다
-node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 ([stale] = 항목이 바뀌어 재확인 필요)
+node scripts/decide.mjs cases/<case> --list        # 남긴 결정 목록 (출처·이유·독립 재검토, [stale] = 항목이 바뀌어 재확인 필요)
 node scripts/agent-log.mjs cases/<case> --follow   # 에이전트 기록을 실시간으로 본다(위 「에이전트 기록 보기」)
 node scripts/design-spec.mjs cases/<case>         # 렌더 증거만 수집 (sources.json 필요)
 node scripts/verify.mjs cases/<case> --url http://127.0.0.1:3000/ --code ../app/src/feature --theme dark

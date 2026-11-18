@@ -69,7 +69,7 @@ test('지적·작업에 대한 결정을 같은 id 의 결정 기록으로 이�
   const dir = fixture();
   const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
   plan.findings[0].id = 'F-001'; writeFileSync(join(dir, 'workplan.json'), JSON.stringify(plan));
-  decide(dir, 'F-001', 'decided', '원본대로 한다');
+  decide(dir, 'F-001', 'decided', '원본대로 한다', { origin: 'user' });
   assert.equal(JSON.parse(readFileSync(join(dir, 'decisions.json'), 'utf8')).decisions[0].section, 'findings');
   const record = { id: 'F-001', kind: 'answered-by-source', statement: '원본대로 한다', rationale: '사용자 결정', sourceRefs: [] };
   const rerun = { ...plan, findings: [], decisions: [record] };
@@ -88,7 +88,7 @@ test('지적·작업에 대한 결정을 같은 id 의 결정 기록으로 이�
 
 test('검토 HTML 은 결정적이고, id 앵커가 있고, 입력을 이스케이프한다', () => {
   const dir = fixture();
-  decide(dir, 'F1', 'ask-design', '디자이너 확인');
+  decide(dir, 'F1', 'ask-design', '디자이너 확인', { origin: 'user' });
   const a = renderReview(dir); const b = renderReview(dir);
   assert.equal(a, b);
   assert.ok(a.includes('id="R1"') && a.includes('id="F1"'));

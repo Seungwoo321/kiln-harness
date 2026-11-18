@@ -13,6 +13,7 @@ import { buildLineage } from '../lineage.mjs';
 import { buildCatalog, catalogText } from '../catalog.mjs';
 import { extract } from '../extract.mjs';
 import { readDecisions, indexItems } from '../decide.mjs';
+import { readOpinions, writeOpinions, pendingOpinions, effectiveDecisions, disagreed, opinionKey, opinionViolations, opinionPrompt } from './second-opinion.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel } from './levels.mjs';
@@ -23,7 +24,7 @@ import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buil
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STAGES = ['scope', 'interpret', 'critic'];
 const DERIVED = ['stages', 'session.json', 'scope.json', 'workplan.json']; // 프로파일 산출물(profile.derived)도 함께 지운다
-const ENGINE_ROLES = ['triage'];
+const ENGINE_ROLES = ['triage', 'second-opinion'];
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const tryJson = (file) => { try { return readJson(file); } catch { return null; } };
 
@@ -32,9 +33,9 @@ export function loadConfig(dir, env = process.env) {
   const base = readJson(join(ROOT, 'kh.config.json'));
   const local = existsSync(join(dir, 'kh.config.json')) ? readJson(join(dir, 'kh.config.json')) : {};
   const level = parseLevel(env.KH_LEVEL ?? local.level ?? base.level ?? DEFAULT_LEVEL);
-  const cfg = { level, limits: { ...base.limits, ...local.limits }, triage: { ...TRIAGE_DEFAULTS, ...base.triage, ...local.triage }, stages: {} };
+  const cfg = { level, limits: { ...base.limits, ...local.limits }, triage: { ...TRIAGE_DEFAULTS, ...base.triage, ...local.triage }, review: { ...base.review, ...local.review }, stages: {} };
   for (const s of Object.keys(base.stages)) { // 엔진 단계와 프로파일 단계(예: 판정 전용 단계)의 설정
-    const key = s.toUpperCase();
+    const key = s.toUpperCase().replace(/-/g, '_');
     // runner 가 바뀌면 기본 설정의 model·effort 는 그 runner 의 이름이 아니므로 상속하지 않는다(claude 의 'opus' 를 codex 에 넘기지 않는다).
     const override = { ...local.stages?.[s] };
     if (env[`KH_${key}_RUNNER`]) override.runner = env[`KH_${key}_RUNNER`];
@@ -197,6 +198,7 @@ function lineageBlock(stage, lin) {
 }
 
 export function buildPrompt(stage, ctx) {
+  if (stage === 'second-opinion') return opinionPrompt(ctx.opinion);
   if (stage === 'triage') {
     const d = ctx.delta;
     const rows = (label, xs) => (xs.length ? `\n- ${label}: ${xs.map((x) => `${x.id}(${x.role})`).join(', ')}` : '');
@@ -330,6 +332,26 @@ function triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged, 
   return { action: report.action, impactIds: report.impactIds, stat };
 }
 
+// ── 독립 재검토 ────────────────────────────────────────────────────────────
+// 권장안을 그대로 채택한 결정마다 새 세션이 원본 위치와 선택지만 보고 반례를 찾는다. 결과는 결정 내용 digest 로 캐시한다.
+function secondOpinions({ dir, registry, cfg, limits, deps, profile, decisions, plan }) {
+  let opinions = readOpinions(dir);
+  const items = plan ? indexItems(plan) : new Map();
+  const todo = pendingOpinions(decisions, opinions).filter((d) => items.has(d.id));
+  if (!todo.length) return opinions;
+  mkdirSync(join(dir, 'stages'), { recursive: true });
+  for (const d of todo) {
+    const r = runStage({ name: 'second-opinion', dir, registry, cfg: { ...cfg.stages['second-opinion'], session: 'fresh' }, limits, deps, ctx: { profile, opinion: { decision: d, item: items.get(d.id) } }, outFile: 'second-opinion.json', stat: newStat(), chain: { ids: {}, started: {} },
+      gate: () => { const out = tryJson(join(dir, 'stages', 'second-opinion.json')); return { violations: opinionViolations(out), value: out }; } });
+    if (!r.ok) { deps.log('REVIEW', `${d.id} 재검토를 끝내지 못했다 — 다음 실행에서 다시 한다`); continue; }
+    const { verdict, counterexamples, none } = r.value;
+    opinions = [...opinions.filter((o) => o.id !== d.id), { id: d.id, key: opinionKey(d), verdict, counterexamples, ...(none ? { none } : {}) }];
+    deps.log('REVIEW', `${d.id} 권장안 채택 재검토: ${verdict}${verdict === 'disagree' ? ' — 반영하지 않고 반례와 함께 되돌린다' : ''}`);
+  }
+  writeOpinions(dir, registry.caseId, opinions);
+  return opinions;
+}
+
 // ── 파이프라인 ──────────────────────────────────────────────────────────────
 export function runPipeline(rawDir, opts = {}, injected = {}) {
   const dir = resolve(rawDir);
@@ -362,10 +384,12 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const force = opts.force || opts.rewrite; // --rewrite: 증분 판정 없이 항상 전면 재작성 경로
   const savedSessions = force ? {} : (tryJson(join(dir, 'session.json')) ?? {});
   const chain = { ids: { ...savedSessions }, started: Object.fromEntries(Object.keys(savedSessions).map((k) => [k, true])) };
-  const decisions = readDecisions(dir);
-  const decisionsDigest = sha256(canonical(decisions));
-  const prev = tryJson(join(dir, 'run-status.json'));
   const prevPlan = tryJson(join(dir, 'workplan.json'));
+  const recorded = readDecisions(dir);
+  const opinions = cfg.review.secondOpinion ? secondOpinions({ dir, registry, cfg, limits, deps, profile, decisions: recorded, plan: prevPlan }) : readOpinions(dir);
+  const decisions = effectiveDecisions(recorded, opinions); // 독립 재검토가 반대한 권장안 채택은 반영하지 않는다
+  const decisionsDigest = opinions.length ? sha256(canonical({ decisions: recorded, opinions })) : sha256(canonical(recorded));
+  const prev = tryJson(join(dir, 'run-status.json'));
 
   if (!force && upToDate(dir, registry, decisionsDigest, level, profile)) {
     deps.log('S3·S4·S6', '원본·결정·검토 수준이 그대로이고 현재 작업계획이 검증을 통과한다 — 다시 해석하지 않는다');
@@ -480,7 +504,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     profile.render(dir);
     if (inc) updateTriage(dir, { outcome: 'incremental', findings: rc.findingsReport });
     snapshotRun(dir, { registry, plan, level, decisionsDigest, keep: cfg.triage.keepRuns });
-    writeStatus(dir, { stage: 'done', loop, result: 'passed', sourcesDigest: registry.digest, level, decisionsDigest, workplanDigest: sha256(canonical(plan)), stages: stats, usage: usage(), changedIds: changedIds(prevPlan, plan), removedQuestions: rc.removed });
+    writeStatus(dir, { stage: 'done', loop, result: 'passed', sourcesDigest: registry.digest, level, decisionsDigest, workplanDigest: sha256(canonical(plan)), stages: stats, usage: usage(), changedIds: changedIds(prevPlan, plan), removedQuestions: rc.removed, ...(opinions.length ? { secondOpinion: { disagreed: disagreed(recorded, opinions).map((d) => d.id) } } : {}) });
     deps.log('S7', `${join(dir, 'review.html')}`);
     return { ok: true, loop, plan };
   }

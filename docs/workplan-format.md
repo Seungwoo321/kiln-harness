@@ -84,10 +84,16 @@ changeKind 와 covers 의 정합(결정적 검사)
 | `id` | 계획서의 항목 id (surfaces·requirements·states·components·apiBindings·gaps·questions·decisions·tasks·findings) |
 | `stance` | 위 권고 값 또는 `decided`(결정 확정) |
 | `note` | 결정 내용 |
+| `origin` | 출처 — `user`(새로 정함) · `recommendation-accepted`(권장안 채택) · `recommendation-modified`(권장안 수정) · `recommendation-rejected`(권장안 기각). 없는 이전 기록은 "출처 기록 없음" |
+| `optionsShown` | 결정 시점 항목이 보여 준 선택지 `[{id, text, recommended?}]` — 질문의 `options`(`option-<n>`)와 `assumption`, 지적의 `recommendation`(`recommended`) |
+| `chosen` · `reason` | 고른 선택지 id, 사용자가 말한 이유(말하지 않았으면 없음) |
+| `seq` | 결정 순번(시각 대신) — 이유 없는 권장안 채택이 연속 `review.bulkAcceptThreshold` 건 이상이면 검토 화면이 알린다 |
 | `section` | 결정 시점 항목의 계획서 섹션 |
 | `itemDigest` | 결정 시점 항목의 digest. 항목이 다시 해석돼 달라지면 화면에 `stale` 로 드러난다. 결정 기록 밖의 항목(지적·질문·작업 등)에 대한 결정을 같은 id 의 결정 기록(`decisions`)으로 이어받은 것은 `stale` 이 아니다. 이어받은 기록이 그 뒤 다시 바뀐 것은 여기서 드러나지 않는다 — 비평이 `decisions.json` 과 대조한다 |
 
 계획서에 없는 id 를 가리키는 결정은 검증에서 막힌다. 시각은 적지 않는다.
+
+`review.secondOpinion` 이 켜져 있으면 `run.mjs` 가 권장안 채택마다 새 세션(엔진 역할 `roles/second-opinion.md`)으로 원본 위치와 선택지만 보고 반례를 찾는다. 결과(`agree`·`disagree`·`needs-info`, 반례)는 `second-opinions.json` 에 결정 내용 digest 로 남고, `disagree` 인 결정은 계획서에 반영하지 않는다.
 
 ### questions · decisions — 질문의 두 종류와 결정 기록 (v2)
 
