@@ -66,6 +66,7 @@ export default {
   conditionRoles: ['plan'], // 조건 커버리지 계약: 문장을 모두 분류해야 하는 원본 역할
   derived: ['WORKPLAN.md', 'WORKPLAN.html', 'review.html', 'conformance.json', 'conformance-brief.md'],
   roleWarnings: ROLE_WARNINGS,
+  expectedRoles: ['design', 'contract', 'implementation', 'design-system'], // 없으면 intake 가 알리는 역할
   role: (name) => readFileSync(join(HERE, 'roles', `${name}.md`), 'utf8'),
   gates: { scope: (...a) => scopeGate(...a), interpret: (...a) => interpretGate(...a), critic: (...a) => criticGate(...a) },
   criticFields: (...a) => criticFields(...a),
