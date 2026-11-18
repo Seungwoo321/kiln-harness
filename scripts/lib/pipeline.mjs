@@ -18,6 +18,7 @@ import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel } from './levels.mjs';
 import { loadProfile, profileForPlan, decidableSections } from './profile.mjs';
+import { readUpstream, inheritConditions, upstreamBrief } from './upstream.mjs';
 import { scopeConditionViolations, planConditionViolations, carryConditions, conditionBrief } from './conditions.mjs';
 import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buildDelta, guardrails, triageViolations, preservedViolations, criticScope, mergeFindings, numberFindings } from './triage.mjs';
 
@@ -33,7 +34,7 @@ export function loadConfig(dir, env = process.env) {
   const base = readJson(join(ROOT, 'kh.config.json'));
   const local = existsSync(join(dir, 'kh.config.json')) ? readJson(join(dir, 'kh.config.json')) : {};
   const level = parseLevel(env.KH_LEVEL ?? local.level ?? base.level ?? DEFAULT_LEVEL);
-  const cfg = { level, limits: { ...base.limits, ...local.limits }, triage: { ...TRIAGE_DEFAULTS, ...base.triage, ...local.triage }, review: { ...base.review, ...local.review }, stages: {} };
+  const cfg = { level, profiles: { ...base.profiles, ...local.profiles }, limits: { ...base.limits, ...local.limits }, triage: { ...TRIAGE_DEFAULTS, ...base.triage, ...local.triage }, review: { ...base.review, ...local.review }, stages: {} };
   for (const s of Object.keys(base.stages)) { // 엔진 단계와 프로파일 단계(예: 판정 전용 단계)의 설정
     const key = s.toUpperCase().replace(/-/g, '_');
     // runner 가 바뀌면 기본 설정의 model·effort 는 그 runner 의 이름이 아니므로 상속하지 않는다(claude 의 'opus' 를 codex 에 넘기지 않는다).
@@ -208,7 +209,7 @@ export function buildPrompt(stage, ctx) {
   if (own) return own(ctx, feedbackBlock);
   const head = `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다(다른 폴더는 절대경로·git -C 로 읽는다) — 바뀌면 결과 파일 쓰기가 거부된다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
-  const tail = lin + (ctx.registry ? conditionBrief(stage, ctx.registry, ctx.profile, ctx.extracts) : '') + ctx.profile.prompt.extras(stage, ctx) + ctx.profile.levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
+  const tail = lin + (ctx.registry ? conditionBrief(stage, ctx.registry, ctx.profile, ctx.extracts) : '') + upstreamBrief(stage, ctx.upstream) + ctx.profile.prompt.extras(stage, ctx) + ctx.profile.levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
   if (stage === 'scope') return `${head}\n결과: stages/scope.json${tail}`;
   if (stage === 'interpret') {
     const decisions = ctx.decisions.length ? `\n\n[사용자 결정 — 확정값]\n${ctx.decisions.map((d) => `- ${d.id} (${d.stance}): ${d.note}`).join('\n')}` : '';
@@ -376,6 +377,8 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   for (const f of ['triage.json', 'delta.json']) rmSync(join(dir, f), { force: true }); // 이번 실행의 판정만 남긴다
   const catalog = buildCatalog(dir, profile);
   const extracts = readExtracts(dir, registry);
+  const upstream = readUpstream(dir, registry);
+  if (upstream) deps.log('S2u', `앞 단계 ${upstream.caseId}(${upstream.kind}) · 조건 ${upstream.conditions.length} · 결정 ${upstream.decisions.length} · 미결 ${upstream.open.length}`);
   deps.log('S2c', `참조 카탈로그: ${catalog.sources.length}건${catalog.missingRoles.length ? ` · 없는 역할 ${catalog.missingRoles.join(', ')}` : ''}`);
   const lineage = registry.lineage ? buildLineage(dir) : null;
   if (lineage) deps.log('S2b', `계보: 이전 ${lineage.previous.caseId} · 결정 ${lineage.decisions.length} · 열린 확인 요청 ${lineage.openQuestions.length} · 원본 ${lineage.sources.map((s) => `${s.sourceId}:${s.status}`).join(' ')}`);
@@ -462,7 +465,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
       deps.log('LOOP', `${stage} 단계가 ${r.attempts}회 안에 통과하지 못했다 — 파생 산출물을 지우고 처음부터 다시 시작한다`);
     };
     const stage = (name, extra) => {
-      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, profile, registry, extracts, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
+      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, profile, registry, extracts, upstream, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
       stats[name].result = r.ok ? 'passed' : 'failed'; stats[name].attempts = r.attempts;
       writeStatus(dir, { stage: name, loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats }); // 단계마다 기록 — 중단돼도 어디까지 갔는지 남는다
       return r;
@@ -472,10 +475,11 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     let scope = baseScope;
     if (scope) { stats.scope.result = 'reused'; mkdirSync(join(dir, 'stages'), { recursive: true }); writeFileSync(join(dir, 'stages', 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`); deps.log('S3', '원본이 그대로라 이전 범위(scope.json)를 이어받는다'); }
     else {
-      const r = stage('scope', { gate: () => { const g = profile.gates.scope(dir, registry, lineage); return g.value ? { ...g, violations: [...g.violations, ...scopeConditionViolations(g.value, registry, profile, extracts)] } : g; }, outFile: 'scope.json', ctx: {} });
+      const r = stage('scope', { gate: () => { const g = profile.gates.scope(dir, registry, lineage); if (!g.value) return g; const inh = inheritConditions(g.value, upstream); return { ...g, value: inh.value, violations: [...g.violations, ...scopeConditionViolations({ ...g.value, conditions: (g.value.conditions ?? []).filter((c) => !c.inherited) }, registry, profile, extracts), ...inh.violations] }; }, outFile: 'scope.json', ctx: {} });
       if (r.needsInput) return needInput('scope', r);
       if (!r.ok) { fail('scope', r); continue; }
       scope = r.value; stats.scope.result = 'passed';
+      if (upstream) writeFileSync(join(dir, 'stages', 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`); // 이어받은 조건을 붙인 범위를 다음 단계가 읽는다
     }
     // S4 (+S5 validate 는 게이트 안에서)
     const ri = stage('interpret', {
