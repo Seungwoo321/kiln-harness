@@ -7,6 +7,7 @@
 // spec = {
 //   "case": "kebab-case-이름",                     // 필수
 //   "brief": "이번 작업이 무엇인지 1~3줄",            // 선택 — 모든 단계 프롬프트의 '작업 주제'
+//   "purpose": "fe-workplan",                       // 선택 — 목적 프로파일(없으면 fe-workplan)
 //   "previous": { "case": "이전-사례", "supersedes": {"새id": "이전id"} },   // 선택 — 후속 작업
 //   "items": [
 //     { "path": "/abs/기획.html", "role": "plan", "mode": "copy|reference", "id": "선택", "note": "선택", "kind": "선택(자동 판별 덮어쓰기)" },
@@ -17,6 +18,7 @@ import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, copyFileS
 import { join, resolve, basename, extname, dirname } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_PURPOSE, purposes } from './lib/profile.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROLES = ['plan', 'design', 'contract', 'implementation', 'design-system', 'context'];
@@ -65,6 +67,7 @@ export function classify(spec) {
   const warnings = [];
   if (!spec?.case || !/^[a-z0-9][a-z0-9-]*$/.test(spec.case)) errors.push('case 는 영문 소문자·숫자·하이픈 이름이어야 함 (예: notification-channel)');
   if (!Array.isArray(spec?.items) || spec.items.length === 0) errors.push('items 가 비었음 — 참조할 자료가 하나도 없다');
+  if (spec?.purpose !== undefined && !purposes().includes(spec.purpose)) errors.push(`purpose 는 ${purposes().join('|')} 중 하나 (${spec.purpose})`);
   const used = new Set();
   const items = (spec?.items ?? []).map((raw, i) => {
     const w = `items[${i}]`;
@@ -117,7 +120,7 @@ export function materialize(spec, root, { force = false } = {}) {
     }
     return { id: it.id, kind: it.kind, role: it.role, path, ...(it.note ? { note: it.note } : {}) };
   });
-  writeFileSync(join(dir, 'inputs.json'), `${JSON.stringify({ caseId: spec.case, ...(spec.brief ? { brief: spec.brief } : {}), ...(spec.previous ? { previous: spec.previous } : {}), inputs }, null, 2)}\n`);
+  writeFileSync(join(dir, 'inputs.json'), `${JSON.stringify({ caseId: spec.case, ...(spec.brief ? { brief: spec.brief } : {}), ...(spec.purpose ? { purpose: spec.purpose } : {}), ...(spec.previous ? { previous: spec.previous } : {}), inputs }, null, 2)}\n`);
   return dir;
 }
 
@@ -134,7 +137,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const { items, errors, warnings } = classify(spec);
   const table = items.map((x) => `  ${x.id.padEnd(22)} ${x.role.padEnd(15)} ${x.kind.padEnd(13)} ${x.kind === 'code' ? `git ${x.repo} @ ${x.ref}${x.paths.length ? ` [${x.paths.join(', ')}]` : ''}` : `${x.mode === 'copy' ? '복사' : '참조'} ← ${x.source}`}`).join('\n');
   if (errors.length) { process.stderr.write(`입력 정의를 만들 수 없다:\n${errors.map((e) => `  ✗ ${e}`).join('\n')}\n`); process.exit(1); }
-  process.stdout.write(`사례: ${spec.case}  (폴더 ${join(root, spec.case)})\n${spec.brief ? `주제: ${spec.brief}\n` : ''}자료 ${items.length}건:\n${table}\n`);
+  process.stdout.write(`사례: ${spec.case}  (폴더 ${join(root, spec.case)})\n${spec.brief ? `주제: ${spec.brief}\n` : ''}목적: ${spec.purpose ?? DEFAULT_PURPOSE}\n자료 ${items.length}건:\n${table}\n`);
   if (warnings.length) process.stdout.write(`경고:\n${warnings.map((w) => `  ! ${w}`).join('\n')}\n`);
   if (argv.includes('--dry')) { process.stdout.write('(dry — 아무것도 만들지 않았다)\n'); process.exit(0); }
 

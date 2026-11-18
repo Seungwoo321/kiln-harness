@@ -4,13 +4,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPipeline, loadConfig, buildPrompt } from './lib/pipeline.mjs';
+import { profileById } from './lib/profile.mjs';
 import { buildCatalog, catalogText } from './catalog.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';
 import { execFileSync } from 'node:child_process';
 import { buildCommand, cleanEnv, which } from './lib/runner.mjs';
 import { decide } from './decide.mjs';
-import { validate } from './validate.mjs';
+import { validate } from '../profiles/fe-workplan/validate.mjs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -420,7 +421,7 @@ test('디자인 시스템 역할: export·props 인덱스를 만들고 카탈로
 test('렌더 증거는 프롬프트에 본문 대신 파일 위치만 싣는다(큰 시안에서 E2BIG·토큰 초과 방지)', () => {
   const big = Array.from({ length: 5000 }, (_, i) => ({ element: `E${i}`, candidates: ['Button', 'Chip'] }));
   const catalog = { sources: [], warnings: [], designSpec: { status: 'passed', sources: [{ sourceId: 'd', elements: 5000, interactions: 1 }], summary: [{ sourceId: 'd', interactions: [{ id: 'I1' }], candidateElements: big.length, componentCandidates: big }] } };
-  const p = buildPrompt('scope', { catalog, feedback: [], lessons: [] });
+  const p = buildPrompt('scope', { catalog, feedback: [], lessons: [], profile: profileById('fe-workplan') });
   assert.ok(p.includes('design-spec/d.json'));
   assert.ok(!p.includes('E4999'));
   assert.ok(Buffer.byteLength(p) < 20000);

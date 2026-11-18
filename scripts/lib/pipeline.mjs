@@ -6,29 +6,23 @@
 //   최종 실패 = 파생 산출물 삭제(원본·결정은 보존), 마지막 시도는 failed/ 에 남기고 run-status.json 에 위반을 적는다
 import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync, cpSync, readdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { register, canonical, sha256, previousDir } from '../register.mjs';
 import { buildLineage } from '../lineage.mjs';
 import { buildCatalog, catalogText } from '../catalog.mjs';
 import { extract } from '../extract.mjs';
-import { validate } from '../validate.mjs';
-import { render } from '../render.mjs';
-import { renderReview } from '../render-review.mjs';
 import { readDecisions, indexItems } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
-import { DEFAULT_LEVEL, parseLevel, levelBlock } from './levels.mjs';
-import { readDesignSpecs } from './design-policy.mjs';
-import { BLOCKING, judgmentErrors, groundJudgments, conformanceBrief } from './conformance.mjs';
-import { seal } from '../design-spec.mjs';
-import { appendConformanceReview } from './conformance-view.mjs';
+import { DEFAULT_LEVEL, parseLevel } from './levels.mjs';
+import { loadProfile, profileForPlan } from './profile.mjs';
 import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buildDelta, guardrails, triageViolations, preservedViolations, criticScope, mergeFindings, numberFindings } from './triage.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STAGES = ['scope', 'interpret', 'critic'];
-const DERIVED = ['stages', 'session.json', 'scope.json', 'workplan.json', 'WORKPLAN.md', 'WORKPLAN.html', 'review.html', 'conformance.json', 'conformance-brief.md'];
+const DERIVED = ['stages', 'session.json', 'scope.json', 'workplan.json']; // 프로파일 산출물(profile.derived)도 함께 지운다
+const ENGINE_ROLES = ['triage'];
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 const tryJson = (file) => { try { return readJson(file); } catch { return null; } };
 
@@ -38,7 +32,7 @@ export function loadConfig(dir, env = process.env) {
   const local = existsSync(join(dir, 'kh.config.json')) ? readJson(join(dir, 'kh.config.json')) : {};
   const level = parseLevel(env.KH_LEVEL ?? local.level ?? base.level ?? DEFAULT_LEVEL);
   const cfg = { level, limits: { ...base.limits, ...local.limits }, triage: { ...TRIAGE_DEFAULTS, ...base.triage, ...local.triage }, stages: {} };
-  for (const s of [...STAGES, 'triage', 'conformance']) {
+  for (const s of Object.keys(base.stages)) { // 엔진 단계와 프로파일 단계(예: 판정 전용 단계)의 설정
     const key = s.toUpperCase();
     // runner 가 바뀌면 기본 설정의 model·effort 는 그 runner 의 이름이 아니므로 상속하지 않는다(claude 의 'opus' 를 codex 에 넘기지 않는다).
     const override = { ...local.stages?.[s] };
@@ -57,82 +51,30 @@ export function loadConfig(dir, env = process.env) {
 }
 
 // ── 게이트 (결정적) ─────────────────────────────────────────────────────────
-const CHANGE = ['new', 'changed'];
-function checkRefs(where, refs, sourceIds, out) {
-  if (!Array.isArray(refs) || refs.length === 0) return out.push(`${where}: sourceRefs 가 비었음`);
-  for (const r of refs) {
-    if (!sourceIds.has(r?.sourceId)) out.push(`${where}: 등록되지 않은 sourceId — ${r?.sourceId}`);
-    if (!r?.locator) out.push(`${where}: locator 가 없음`);
-  }
-}
-
-export function scopeGate(dir, registry, lineage = null) {
-  const out = [];
-  const scope = tryJson(join(dir, 'stages', 'scope.json'));
-  if (!scope) return { violations: ['stages/scope.json 이 없거나 JSON 이 아님'] };
-  const ids = new Set(registry.sources.map((s) => s.id));
-  const used = new Set();
-  const collect = (refs) => (Array.isArray(refs) ? refs : []).forEach((r) => used.add(r?.sourceId));
-  if (!Array.isArray(scope.surfaces) || scope.surfaces.length === 0) out.push('surfaces 가 비었음 — 이번 작업 화면이 하나도 없다');
-  const seen = new Set();
-  (scope.surfaces ?? []).forEach((s, i) => {
-    const w = `surfaces[${i}]`;
-    if (!s.id || seen.has(s.id)) out.push(`${w}: id 가 없거나 중복`);
-    seen.add(s.id);
-    for (const f of ['title', 'entry']) if (!s[f]) out.push(`${w}: ${f} 가 없음`);
-    if (!CHANGE.includes(s.change)) out.push(`${w}: change 는 ${CHANGE.join('|')}`);
-    checkRefs(w, s.sourceRefs, ids, out); collect(s.sourceRefs);
-    // 후속 사례: 바뀐 원본에 근거가 닿지 않는 화면은 이번 범위가 아니다(버전 관리).
-    const unchanged = new Set((lineage?.sources ?? []).filter((x) => x.status === 'unchanged').map((x) => x.sourceId));
-    const refsOf = (s.sourceRefs ?? []).map((r) => r?.sourceId).filter((id) => ids.has(id));
-    if (lineage && refsOf.length > 0 && refsOf.every((id) => unchanged.has(id))) out.push(`${w}: 이전 사례와 같은 원본만 근거라 이번 범위가 아님 — excluded 로 옮긴다 (${s.id})`);
-  });
-  (scope.excluded ?? []).forEach((x, i) => {
-    const w = `excluded[${i}]`;
-    if (!x.title || !x.reason) out.push(`${w}: title·reason 이 필요함`);
-    checkRefs(w, x.sourceRefs, ids, out); collect(x.sourceRefs);
-  });
-  for (const s of registry.sources) {
-    if (['plan', 'design'].includes(s.role) && !used.has(s.id)) out.push(`입력이 범위 판단에 쓰이지 않음 — ${s.id} (surfaces 또는 excluded 의 sourceRefs 에 나타나야 함)`);
-  }
-  return { violations: out, value: scope };
-}
-
 const ENVELOPE = ['schemaVersion', 'kind', 'caseId', 'inputDigests', 'findings', 'level'];
-export function assemblePlan(registry, draft, findings = [], level = DEFAULT_LEVEL) {
+export function assemblePlan(registry, draft, findings, level, profile) {
   const body = Object.fromEntries(Object.entries(draft).filter(([k]) => !ENVELOPE.includes(k)));
-  return { schemaVersion: 3, kind: 'WorkPlan', caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), level, ...body, findings };
+  return { schemaVersion: profile.schemaVersion, kind: profile.kind, caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), level, ...body, findings };
 }
 
-export function interpretGate(dir, registry, scope, level = DEFAULT_LEVEL) {
+// 해석 초안을 envelope 로 감싸고 프로파일 게이트에 넘긴다.
+export function interpretGate(dir, registry, scope, level = DEFAULT_LEVEL, profile = loadProfile(dir)) {
   const draft = tryJson(join(dir, 'stages', 'workplan.draft.json'));
   if (!draft) return { violations: ['stages/workplan.draft.json 이 없거나 JSON 이 아님'] };
-  const out = [];
-  const want = new Set(scope.surfaces.map((s) => s.id));
-  const got = new Set((draft.surfaces ?? []).map((s) => s.id));
-  for (const id of want) if (!got.has(id)) out.push(`범위의 화면이 계획서에 없음 — ${id}`);
-  for (const id of got) if (!want.has(id)) out.push(`범위에 없는 화면을 추가함 — ${id}`);
-  const plan = assemblePlan(registry, draft, [], level);
-  const specs = readDesignSpecs(dir, registry);
-  plan.designSpecDigests = specs.map(s => s.digest);
-  for (const row of plan.designSpecs ?? []) {
-    const spec = specs.find(s => s.sourceId === row.sourceId);
-    row.observation = spec?.elements.find(e => e.id === row.element) ?? spec?.interactions.find(i => i.id === row.element) ?? null;
-  }
-  out.push(...validate(dir, plan));
-  return { violations: out, value: plan };
+  return profile.gates.interpret({ dir, registry, scope, draft, plan: assemblePlan(registry, draft, [], level, profile) });
 }
 
 // 원본이 이미 답한 질문은 질문이 아니라 결정(decisions)으로 내린다 — 비평이 'demote' 로 판정하고 근거(decision)를 단 질문이 대상이다.
-// 그 질문에 기대던 추론 항목은 같은 근거를 단 원본 근거 항목이 되고, 연쇄 참조(영향·covers·지적·계보)도 함께 정리한다.
+// 그 질문에 기대던 추론 항목은 같은 근거를 단 원본 근거 항목이 되고, 연쇄 참조(영향·지적·계보, 프로파일 항목의 참조는 profile.prune)도 함께 정리한다.
 export function applyQuestionVerdicts(plan, demoted, dropped) {
   if (demoted.size === 0 && dropped.size === 0) return plan;
+  const profile = profileForPlan(plan);
   const next = JSON.parse(JSON.stringify(plan));
   const gone = new Set([...demoted.keys(), ...dropped]);
   const dedupe = (refs) => [...new Map(refs.map((r) => [`${r.sourceId}|${r.locator}`, r])).values()];
   next.questions = (next.questions ?? []).filter((q) => !gone.has(q.id));
   next.decisions = [...(next.decisions ?? []), ...[...demoted].map(([qid, d]) => ({ id: `D-${qid}`, ...d }))];
-  for (const key of ['requirements', 'states']) {
+  for (const key of profile.inferable) {
     for (const item of next[key] ?? []) {
       if (item.basis === 'inferred' && demoted.has(item.question)) {
         item.sourceRefs = dedupe([...(item.sourceRefs ?? []), ...demoted.get(item.question).sourceRefs]);
@@ -143,7 +85,7 @@ export function applyQuestionVerdicts(plan, demoted, dropped) {
     }
   }
   for (const q of next.questions) q.impact = (q.impact ?? []).filter((id) => !gone.has(id));
-  for (const task of next.tasks ?? []) task.covers = (task.covers ?? []).filter((id) => !gone.has(id));
+  profile.prune(next, gone);
   for (const x of next.lineage?.resolved ?? []) {
     if (x.status === 'still-open' && demoted.has(x.question)) {
       x.status = 'resolved'; x.evidence = demoted.get(x.question).sourceRefs; x.note = `${x.note} (비평 단계에서 원본이 이미 답한 것으로 확인 — D-${x.question})`; delete x.question;
@@ -154,7 +96,6 @@ export function applyQuestionVerdicts(plan, demoted, dropped) {
   return next;
 }
 
-// inc(증분 실행)이면 비평 범위(inc.scope) 안의 질문·화면만 판정·대조하고, 범위 밖 이전 지적은 이월한다.
 // 담당자에게 넘기는 지적(ask-*)은 코드·계약으로 정할 수 없는 미결정만이다. 무엇이 미결정인지, 왜 외부가 정해야 하는지, 답에 따라 달라지는
 // 계획서 항목을 적게 한다. 백엔드 영향 주장은 입력·저장·소비·콜백 경계를 실제로 따라간 path:line 이 있어야 한다 — 필드 이름 검색이나 UI 차이만으로는 영향 주체를 정하지 않는다.
 export function askViolations(f, w, planIds) {
@@ -172,7 +113,9 @@ export function askViolations(f, w, planIds) {
   return out;
 }
 
+// inc(증분 실행)이면 비평 범위(inc.scope) 안의 질문·분류 단위만 판정·대조하고, 범위 밖 이전 지적은 이월한다.
 export function criticGate(dir, registry, plan, inc = null) {
+  const profile = profileForPlan(plan);
   const crit = tryJson(join(dir, 'stages', 'critic.json'));
   if (!crit || !Array.isArray(crit.findings)) return { violations: ['stages/critic.json 이 없거나 findings 배열이 없음'] };
   const out = [];
@@ -187,8 +130,8 @@ export function criticGate(dir, registry, plan, inc = null) {
   const verdicts = Array.isArray(crit.questionVerdicts) ? crit.questionVerdicts : [];
   const qids = (plan.questions ?? []).map((q) => q.id).filter((id) => !inc || inc.scope.ids.has(id));
   const lineageConflicts = new Set((plan.lineage?.inherited ?? []).filter((x) => x.status === 'conflict').map((x) => x.question));
-  const designConflicts = new Set((plan.questions ?? []).filter(q => q.designEvidence).map(q => q.id));
-  const inferredTargets = new Set([...(plan.requirements ?? []), ...(plan.states ?? [])].filter((x) => x.basis === 'inferred').map((x) => x.question));
+  const guarded = profile.protectedQuestions(plan);
+  const inferredTargets = new Set(profile.inferable.flatMap((k) => plan[k] ?? []).filter((x) => x.basis === 'inferred').map((x) => x.question));
   const demoted = new Map();
   const dropped = new Set();
   for (const id of qids) if (verdicts.filter((v) => v.id === id).length !== 1) out.push(`questionVerdicts: 질문 ${id} 의 판정이 정확히 하나여야 함`);
@@ -199,7 +142,7 @@ export function criticGate(dir, registry, plan, inc = null) {
     if (!['keep', 'demote', 'drop'].includes(v.verdict)) return out.push(`${w}: verdict 는 keep|demote|drop`);
     if (v.verdict === 'keep') return undefined;
     if (lineageConflicts.has(v.id)) return out.push(`${w}: 이전 결정과의 충돌 질문은 내리거나 제거할 수 없음 — ${v.id}`);
-    if (designConflicts.has(v.id)) return out.push(`${w}: 시안 동작 충돌 질문은 내리거나 제거할 수 없음 — ${v.id}`);
+    if (guarded.has(v.id)) return out.push(`${w}: ${guarded.get(v.id)} — ${v.id}`);
     if (v.verdict === 'drop') {
       if (!v.reason) out.push(`${w}: drop 은 reason 이 필요함`);
       if (inferredTargets.has(v.id)) out.push(`${w}: 추론 항목이 가리키는 notice 질문은 제거할 수 없음 — demote 하거나 keep 한다 (${v.id})`);
@@ -215,31 +158,17 @@ export function criticGate(dir, registry, plan, inc = null) {
 
   const applied = applyQuestionVerdicts(plan, demoted, dropped);
   const gone = new Set([...demoted.keys(), ...dropped]);
-  if ((plan.level ?? DEFAULT_LEVEL) >= 8) {
-    // 체계 검증: 화면마다 어떤 원본끼리 대조했는지 남아야 한다 — 대조 없이 통과시키지 않는다.
-    const cov = Array.isArray(crit.coverage) ? crit.coverage : [];
-    const need = registry.sources.filter((x) => ['plan', 'design', 'contract'].includes(x.role)).map((x) => x.id);
-    for (const sf of (plan.surfaces ?? []).filter((x) => !inc || inc.scope.surfaces.has(x.id))) {
-      const c = cov.find((x) => x.surface === sf.id);
-      if (!c) { out.push(`coverage: 화면 ${sf.id} 의 대조 기록이 없음`); continue; }
-      const got = new Set(Array.isArray(c.sourcesCompared) ? c.sourcesCompared : []);
-      for (const id of need) if (!got.has(id)) out.push(`coverage: 화면 ${sf.id} 에서 ${id} 와 대조하지 않음`);
-      if (!c.result) out.push(`coverage: 화면 ${sf.id} 의 result 가 없음`);
-    }
-    if (out.length) return { violations: out };
-  }
+  out.push(...profile.gates.critic({ plan, crit, registry, inc }));
+  if (out.length) return { violations: out };
   let findings = crit.findings.filter((f) => !gone.has(f.target));
-  let coverage = crit.coverage;
   let report = null;
   const taken = new Set(indexItems(applied).keys()); // 지적 id 는 비평이 아니라 스크립트가 계획서의 기존 id 와 겹치지 않게 매긴다
   if (!inc) findings = numberFindings(findings, taken);
   else {
     ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId, taken));
-    const planSurfaces = new Set((plan.surfaces ?? []).map((x) => x.id));
-    coverage = [...(inc.prev.coverage ?? []).filter((c) => !inc.scope.surfaces.has(c.surface) && planSurfaces.has(c.surface)), ...(crit.coverage ?? [])];
   }
-  const merged = { ...applied, findings, ...((plan.level ?? DEFAULT_LEVEL) >= 8 ? { coverage } : {}) };
-  out.push(...validate(dir, merged)); // 내려온 decision 의 근거·남긴 질문의 기준(두 원본 위치·증거·찾아본 범위)은 여기서 결정적으로 검사된다
+  const merged = { ...applied, findings, ...profile.criticFields({ plan, crit, inc }) };
+  out.push(...profile.validate(dir, merged)); // 내려온 decision 의 근거·남긴 질문의 기준(두 원본 위치·증거·찾아본 범위)은 여기서 결정적으로 검사된다
   return { violations: out, value: merged, removed: [...gone], findingsReport: report };
 }
 
@@ -249,8 +178,8 @@ export function sourcesIntact(registry) {
 }
 
 // ── 프롬프트 ────────────────────────────────────────────────────────────────
-const feedbackBlock = (title, items) => (items.length ? `\n\n[${title}]\n${items.map((e) => `- ${e}`).join('\n')}` : '');
-const role = (name) => readFileSync(join(ROOT, 'roles', `${name}.md`), 'utf8');
+export const feedbackBlock = (title, items) => (items.length ? `\n\n[${title}]\n${items.map((e) => `- ${e}`).join('\n')}` : '');
+const roleText = (name, profile) => (ENGINE_ROLES.includes(name) ? readFileSync(join(ROOT, 'roles', `${name}.md`), 'utf8') : profile.role(name));
 
 function lineageBlock(stage, lin) {
   const head = `\n\n[후속 사례] 이전 사례 ${lin.previous.caseId} 의 후속 작업이다. 자세한 대조 결과는 lineage.json, 이전 기록은 이전 사례 폴더(${lin.previous.case})에 있다.\n- 현재 상태의 정본은 sources.json 이 고정한 실제 코드다. 결정 근거의 정본은 이전 사례의 기록(결정·열린 확인 요청·추론 항목)이다.`;
@@ -268,23 +197,20 @@ export function buildPrompt(stage, ctx) {
     const rows = (label, xs) => (xs.length ? `\n- ${label}: ${xs.map((x) => `${x.id}(${x.role})`).join(', ')}` : '');
     return `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다. 읽을 파일: delta.json, sources.json, extract/*.json, references.json, history/${d.previous}/workplan.json·scope.json·critic.json. 역할 파일의 입출력 계약을 따른다.\n\n[입력 변화 — 이전 실행 ${d.previous} 대비]${rows('추가', d.added)}${rows('변경', d.changed)}${rows('삭제', d.removed)}\n- 변경 없음 ${d.unchanged}건 · 영향 후보 항목: ${d.candidateIds.join(', ') || '(없음)'}${ctx.decisionsChanged ? '\n- 결정(decisions.json)도 이전 실행 뒤에 바뀌었다.' : ''}\n결과: stages/triage.json${feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback)}`;
   }
-  if (stage === 'conformance') return `conformance-facts.json의 사실만 근거로 구현 적합성을 판단한다. 모든 fact id를 정확히 한 번 판정한다. 결과는 stages/conformance.json이다. 형식은 역할 파일을 따른다. 컴포넌트 대응·수용 여부를 직접 판단하고 수집 스크립트의 후보나 오차를 정답으로 취급하지 않는다.${feedbackBlock('이전 시도의 형식 위반', ctx.feedback)}`;
+  const own = ctx.profile?.prompt.stages?.[stage];
+  if (own) return own(ctx, feedbackBlock);
   const head = `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다(다른 폴더는 절대경로·git -C 로 읽는다) — 바뀌면 결과 파일 쓰기가 거부된다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
-  const design = ctx.catalog?.designSpec;
-  // 렌더 증거는 본문을 싣지 않고 파일 위치만 준다 — 다른 원본처럼 에이전트가 읽는다(본문을 실으면 큰 시안에서 프롬프트가 수 MB 가 된다).
-  const specFiles = (design?.summary ?? []).map((s) => `design-spec/${s.sourceId}.json`);
-  const evidence = design ? `\n\n[렌더 증거]\ndesign-spec: ${design.status}${design.reason ? ` (${design.reason})` : ''}. ${JSON.stringify(design.sources ?? [])}\n렌더 결과 파일(요소·계산 스타일·상호작용·요소별 컴포넌트 후보): ${specFiles.length ? specFiles.join(', ') : 'design-spec/<sourceId>.json'}. 컴포넌트 기준: component-baseline.json. 기존 UI 사용례: existing-patterns.json (${ctx.catalog.existingPatterns ?? 0}개, 적합성은 코드로 확인). 출처별 수용 정책과 v3 시안 규격을 적용한다.` : '';
-  const tail = lin + evidence + levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
+  const tail = lin + ctx.profile.prompt.extras(stage, ctx) + ctx.profile.levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
   if (stage === 'scope') return `${head}\n결과: stages/scope.json${tail}`;
   if (stage === 'interpret') {
     const decisions = ctx.decisions.length ? `\n\n[사용자 결정 — 확정값]\n${ctx.decisions.map((d) => `- ${d.id} (${d.stance}): ${d.note}`).join('\n')}` : '';
     const inc = ctx.incremental;
     const base = inc ? `\n\n[증분 해석] 기존 계획서가 workplan.json 에 있다. 입력이 일부 바뀌었고(delta.json) 영향 항목은 ${inc.impactIds.join(', ')} 이다. 이 항목과 그에 맞춰 새로 필요한 항목(새 id)만 고치거나 더하고, 나머지 항목은 workplan.json 의 내용을 한 글자도 바꾸지 않고 그대로 옮긴다 — 문구·id·순서를 다듬지 않는다. 영향 항목을 고치면서 다른 항목이 어긋나게 되면 그 항목도 impact 에 속하는 것이므로 계획서를 멈추고 blocked 로 알린다.`
       : ctx.basePlan ? '\n\n기존 계획서가 workplan.json 에 있다. 이를 바탕으로, 위 결정이 가리키는 항목과 그에 영향받는 항목만 고치고 나머지는 그대로 둔다.' : '';
-    return `${head}\n범위: stages/scope.json. 계획서 형식: ${join(ROOT, 'docs', 'workplan-format.md')} (v2·v3 절 포함).\n결과: stages/workplan.draft.json${base}${decisions}${tail}`;
+    return `${head}\n${ctx.profile.prompt.interpretInputs}\n결과: stages/workplan.draft.json${base}${decisions}${tail}`;
   }
-  const incCritic = ctx.incremental ? `\n\n[증분 비평] 영향·신규 항목만 새로 비평한다: ${[...ctx.incremental.scope.ids].join(', ')}. findings 의 target 과 questionVerdicts 는 이 범위 안의 항목만 쓴다(범위 밖 질문은 판정하지 않는다). 범위 밖 항목에 대한 이전 지적은 스크립트가 이월하므로 다시 쓰지 않는다 — 이월되는 이전 지적과 겹치는 새 지적도 쓰지 않는다. 이전 지적: history/${ctx.incremental.previousRunId}/workplan.json 의 findings.${ctx.incremental.scope.surfaces.size ? ` 화면 대조(coverage)는 ${[...ctx.incremental.scope.surfaces].join(', ')} 만 쓴다.` : ''}` : '';
+  const incCritic = ctx.incremental ? `\n\n[증분 비평] 영향·신규 항목만 새로 비평한다: ${[...ctx.incremental.scope.ids].join(', ')}. findings 의 target 과 questionVerdicts 는 이 범위 안의 항목만 쓴다(범위 밖 질문은 판정하지 않는다). 범위 밖 항목에 대한 이전 지적은 스크립트가 이월하므로 다시 쓰지 않는다 — 이월되는 이전 지적과 겹치는 새 지적도 쓰지 않는다. 이전 지적: history/${ctx.incremental.previousRunId}/workplan.json 의 findings.${ctx.profile.prompt.incrementalCritic(ctx.incremental.scope)}` : '';
   return `${head}\n검토 대상: stages/workplan.checked.json (해석 게이트를 통과한 계획서). 사용자 결정: decisions.json (없으면 결정 없음). 이전 사례 기록이 있으면 lineage.json.\n결과: stages/critic.json — findings 와 questionVerdicts(모든 질문)${incCritic}${tail}`;
 }
 
@@ -315,7 +241,7 @@ export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, ou
     if (outFile) rmSync(join(dir, 'stages', outFile), { force: true });
     deps.log(name, `시도 ${n}/${limits.stageAttempts}${feedback.length ? ` (위반 ${feedback.length}건 반영)` : ''} · ${cfg.runner}/${cfg.model ?? '기본'}${cfg.effort ? `/${cfg.effort}` : ''}`);
     const session = sessionFor(cfg, chain);
-    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: role(name), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), gitRepos: gitRepos(registry), timeoutSec: limits.timeoutSec, session, logName: `${name}-${n}`,
+    const res = deps.runAgent({ runner: cfg.runner, model: cfg.model, effort: cfg.effort, role: roleText(name, ctx.profile), prompt: buildPrompt(name, { ...ctx, feedback }), cwd: dir, addDirs: addDirs(dir, registry), gitRepos: gitRepos(registry), timeoutSec: limits.timeoutSec, session, logName: `${name}-${n}`,
       onTick: deps.tick ? (t) => deps.tick({ stage: name, attempt: n, max: limits.stageAttempts, cfg, ...t }) : undefined });
     deps.tickEnd?.();
     if (session) {
@@ -346,8 +272,8 @@ export function runStage({ name, dir, registry, cfg, limits, deps, ctx, gate, ou
 }
 
 // ── 상태 ────────────────────────────────────────────────────────────────────
-const writeStatus = (dir, body) => writeFileSync(join(dir, 'run-status.json'), `${JSON.stringify({ schemaVersion: 3, ...body, 'design-spec': tryJson(join(dir, 'design-spec-status.json')), ...(tryJson(join(dir, 'triage.json')) ? { triage: (({ delta, ...t }) => t)(tryJson(join(dir, 'triage.json'))) } : {}) }, null, 2)}\n`);
-const newStat = () => ({ calls: 0, tokens: 0, seconds: 0, costUsd: 0 });
+export const writeRunStatus = (dir, body, profile) => writeFileSync(join(dir, 'run-status.json'), `${JSON.stringify({ schemaVersion: 3, ...body, ...profile.statusExtras(dir), ...(tryJson(join(dir, 'triage.json')) ? { triage: (({ delta, ...t }) => t)(tryJson(join(dir, 'triage.json'))) } : {}) }, null, 2)}\n`);
+export const newStat = () => ({ calls: 0, tokens: 0, seconds: 0, costUsd: 0 });
 
 function snapshotFailed(dir, loop, violations) {
   const to = join(dir, 'failed', `loop-${loop}`);
@@ -357,15 +283,15 @@ function snapshotFailed(dir, loop, violations) {
   writeFileSync(join(to, 'violations.json'), `${JSON.stringify(violations, null, 2)}\n`);
 }
 
-const discard = (dir) => { for (const f of DERIVED) rmSync(join(dir, f), { recursive: true, force: true }); };
+const discard = (dir, profile) => { for (const f of [...DERIVED, ...profile.derived]) rmSync(join(dir, f), { recursive: true, force: true }); };
 
-function upToDate(dir, registry, decisionsDigest, level) {
+function upToDate(dir, registry, decisionsDigest, level, profile) {
   const status = tryJson(join(dir, 'run-status.json'));
   const plan = tryJson(join(dir, 'workplan.json'));
   if (!status || !plan || status.result !== 'passed' || status.decisionsDigest !== decisionsDigest || (status.level ?? DEFAULT_LEVEL) !== level) return false;
   if (plan.schemaVersion < 2 || !Array.isArray(plan.findings)) return false;
-  if (plan.schemaVersion < 3 && readDesignSpecs(dir, registry).length) return false;
-  return [...plan.inputDigests].sort().join() === registry.sources.map((s) => s.sha256).sort().join() && validate(dir).length === 0;
+  if (!profile.upToDate(dir, registry, plan)) return false;
+  return [...plan.inputDigests].sort().join() === registry.sources.map((s) => s.sha256).sort().join() && profile.validate(dir).length === 0;
 }
 
 export const changedIds = (before, after) => { const a = itemIds(before); const b = itemIds(after); return [...b.keys()].filter((id) => a.get(id) !== b.get(id)).concat([...a.keys()].filter((id) => !b.has(id))).sort(); };
@@ -377,7 +303,7 @@ function updateTriage(dir, patch) {
 }
 
 // 가드레일이 먼저 걸리면 에이전트를 부르지 않고 rewrite 다. 판정 단계가 통과하지 못해도 rewrite 로 돌아간다 — 전면 재작성은 항상 안전한 경로다.
-function triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged }) {
+function triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged, profile }) {
   const delta = buildDelta(registry, snap);
   writeFileSync(join(dir, 'delta.json'), `${JSON.stringify(delta, null, 2)}\n`);
   const applied = guardrails(delta, cfg.triage);
@@ -388,7 +314,7 @@ function triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged }
     deps.log('S0', `증분 불가 — ${applied.map((g) => g.detail).join(' / ')} → 전면 재작성`);
   } else {
     mkdirSync(join(dir, 'stages'), { recursive: true });
-    const r = runStage({ name: 'triage', dir, registry, cfg: cfg.stages.triage, limits, deps, ctx: { delta, decisionsChanged }, outFile: 'triage.json', stat, chain: { ids: {}, started: {} },
+    const r = runStage({ name: 'triage', dir, registry, cfg: cfg.stages.triage, limits, deps, ctx: { delta, decisionsChanged, profile }, outFile: 'triage.json', stat, chain: { ids: {}, started: {} },
       gate: () => { const out = tryJson(join(dir, 'stages', 'triage.json')); const v = triageViolations(out, delta, snap.plan, { decisionsChanged }); return { violations: v, value: out }; } });
     if (r.ok) { report.verdict = r.value; report.action = r.value.action; report.reason = r.value.reason; report.impactIds = r.value.action === 'incremental' ? r.value.impactIds : []; }
     else { report.reason = '판정 단계가 통과하지 못해 전면 재작성으로 돌아간다'; report.fallback = r.needsInput ?? r.violations; }
@@ -401,6 +327,8 @@ function triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged }
 // ── 파이프라인 ──────────────────────────────────────────────────────────────
 export function runPipeline(rawDir, opts = {}, injected = {}) {
   const dir = resolve(rawDir);
+  const profile = loadProfile(dir);
+  const writeStatus = (d, body) => writeRunStatus(d, body, profile);
   const live = createLive();
   const deps = { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => live.print(logLine(live.color, s, m))) };
   const cfg = loadConfig(dir, opts.env ?? process.env);
@@ -411,19 +339,14 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   deps.log('S1', `원본 ${registry.sources.length}건 · digest ${registry.digest.slice(0, 12)}`);
   const extracted = extract(dir);
   deps.log('S2', `앵커 ${extracted.reduce((n, x) => n + x.anchors, 0)}개`);
-  try {
-    execFileSync(process.execPath, [join(ROOT, 'scripts', 'design-spec.mjs'), dir], { env: { ...process.env, ...opts.env }, timeout: 600000, maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (e) {
-    const violation = `S2d 렌더 실패: ${e.stderr?.toString() || e.message}`;
-    writeFileSync(join(dir, 'design-spec-status.json'), `${JSON.stringify(seal({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: violation, sources: [] }), null, 2)}\n`);
-    writeStatus(dir, { stage: 'design-spec', result: 'failed', violations: [violation] });
-    return { ok: false, violations: [violation] };
+  const prepared = profile.prepare(dir, { env: opts.env, log: deps.log });
+  if (!prepared.ok) {
+    writeStatus(dir, { stage: prepared.stage, result: 'failed', violations: [prepared.violation] });
+    return { ok: false, violations: [prepared.violation] };
   }
-  const designStatus = readJson(join(dir, 'design-spec-status.json'));
-  deps.log('S2d', `design-spec: ${designStatus.status}${designStatus.reason ? ` (${designStatus.reason})` : ''}`);
   rmSync(join(dir, 'lineage.json'), { force: true });
   for (const f of ['triage.json', 'delta.json']) rmSync(join(dir, f), { force: true }); // 이번 실행의 판정만 남긴다
-  const catalog = buildCatalog(dir);
+  const catalog = buildCatalog(dir, profile);
   deps.log('S2c', `참조 카탈로그: ${catalog.sources.length}건${catalog.missingRoles.length ? ` · 없는 역할 ${catalog.missingRoles.join(', ')}` : ''}`);
   const lineage = registry.lineage ? buildLineage(dir) : null;
   if (lineage) deps.log('S2b', `계보: 이전 ${lineage.previous.caseId} · 결정 ${lineage.decisions.length} · 열린 확인 요청 ${lineage.openQuestions.length} · 원본 ${lineage.sources.map((s) => `${s.sourceId}:${s.status}`).join(' ')}`);
@@ -437,11 +360,11 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const prev = tryJson(join(dir, 'run-status.json'));
   const prevPlan = tryJson(join(dir, 'workplan.json'));
 
-  if (!force && upToDate(dir, registry, decisionsDigest, level)) {
+  if (!force && upToDate(dir, registry, decisionsDigest, level, profile)) {
     deps.log('S3·S4·S6', '원본·결정·검토 수준이 그대로이고 현재 작업계획이 검증을 통과한다 — 다시 해석하지 않는다');
-    render(dir); renderReview(dir);
+    profile.render(dir);
     snapshotRun(dir, { registry, plan: prevPlan, level, decisionsDigest, keep: cfg.triage.keepRuns }); // 이전 버전이 만든 사례도 다음 재실행부터 증분 대상이 된다
-    writeStatus(dir, { ...prev, 'design-spec': designStatus });
+    writeStatus(dir, { ...prev });
     return { ok: true, skipped: true };
   }
 
@@ -456,18 +379,18 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   let triageStat = null;
   if (!force && !sameSources && !levelChanged && !registry.lineage && prev?.result === 'passed' && prevPlan?.schemaVersion >= 3 && existsSync(join(dir, 'scope.json'))
     && snap && snap.meta.workplanDigest === sha256(canonical(prevPlan)) && snap.meta.level === level) {
-    const t = triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged: prev.decisionsDigest !== decisionsDigest });
+    const t = triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged: prev.decisionsDigest !== decisionsDigest, profile });
     triageStat = t.stat;
     if (t.action === 'skip') {
       const plan = { ...prevPlan, inputDigests: registry.sources.map((x) => x.sha256) };
       writeFileSync(join(dir, 'workplan.json'), `${JSON.stringify(plan, null, 2)}\n`);
-      render(dir); renderReview(dir);
+      profile.render(dir);
       snapshotRun(dir, { registry, plan, level, decisionsDigest, keep: cfg.triage.keepRuns });
       writeStatus(dir, { ...prev, stage: 'done', result: 'passed', sourcesDigest: registry.digest, decisionsDigest, workplanDigest: sha256(canonical(plan)), changedIds: [], stages: { ...prev.stages, triage: { ...triageStat, result: 'skipped' } } });
       deps.log('S0', '입력이 바뀌었지만 작업계획에는 영향이 없다고 판정 — 이전 계획서를 그대로 쓴다');
       return { ok: true, skipped: true, triage: 'skip' };
     }
-    if (t.action === 'incremental') incremental = { impactIds: t.impactIds, previousRunId: snap.runId, prev: { findings: prevPlan.findings ?? [], coverage: prevPlan.coverage ?? [] } };
+    if (t.action === 'incremental') incremental = { impactIds: t.impactIds, previousRunId: snap.runId, prev: { findings: prevPlan.findings ?? [], plan: prevPlan } };
   }
   const reuseScope = !force && (sameSources || incremental) && existsSync(join(dir, 'scope.json')) && prevPlan?.schemaVersion >= 2;
   const baseScope = reuseScope ? readJson(join(dir, 'scope.json')) : null;
@@ -490,7 +413,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     if (loop > 1 && incremental) updateTriage(dir, { escalated: '증분 실행이 통과하지 못해 전면 재작성으로 전환했다' });
     const useBase = loop === 1 && reuseScope;
     const basePlan = useBase && !levelChanged ? prevPlan : null;
-    if (!useBase) { discard(dir); chain.ids = {}; chain.started = {}; } else { rmSync(join(dir, 'stages'), { recursive: true, force: true }); }
+    if (!useBase) { discard(dir, profile); chain.ids = {}; chain.started = {}; } else { rmSync(join(dir, 'stages'), { recursive: true, force: true }); }
     mkdirSync(join(dir, 'stages'), { recursive: true });
     writeStatus(dir, { stage: 'running', loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats });
 
@@ -507,7 +430,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
       deps.log('LOOP', `${stage} 단계가 ${r.attempts}회 안에 통과하지 못했다 — 파생 산출물을 지우고 처음부터 다시 시작한다`);
     };
     const stage = (name, extra) => {
-      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
+      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, profile, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
       stats[name].result = r.ok ? 'passed' : 'failed'; stats[name].attempts = r.attempts;
       writeStatus(dir, { stage: name, loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats }); // 단계마다 기록 — 중단돼도 어디까지 갔는지 남는다
       return r;
@@ -517,7 +440,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     let scope = baseScope;
     if (scope) { stats.scope.result = 'reused'; mkdirSync(join(dir, 'stages'), { recursive: true }); writeFileSync(join(dir, 'stages', 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`); deps.log('S3', '원본이 그대로라 이전 범위(scope.json)를 이어받는다'); }
     else {
-      const r = stage('scope', { gate: () => scopeGate(dir, registry, lineage), outFile: 'scope.json', ctx: {} });
+      const r = stage('scope', { gate: () => profile.gates.scope(dir, registry, lineage), outFile: 'scope.json', ctx: {} });
       if (r.needsInput) return needInput('scope', r);
       if (!r.ok) { fail('scope', r); continue; }
       scope = r.value; stats.scope.result = 'passed';
@@ -525,7 +448,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     // S4 (+S5 validate 는 게이트 안에서)
     const ri = stage('interpret', {
       gate: () => {
-        const g = interpretGate(dir, registry, scope, level);
+        const g = interpretGate(dir, registry, scope, level, profile);
         if (g.violations.length || !inc) return g;
         const kept = preservedViolations(prevPlan, g.value, inc.impactIds); // 증분 게이트: 영향 밖 항목은 그대로여야 한다
         return kept.length ? { violations: kept } : g;
@@ -542,11 +465,11 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     stats.critic.result = 'passed';
 
     const plan = rc.value;
-    const finalErrors = validate(dir, plan);
+    const finalErrors = profile.validate(dir, plan);
     if (finalErrors.length) { fail('critic', { attempts: 0, violations: finalErrors }); continue; }
     writeFileSync(join(dir, 'workplan.json'), `${JSON.stringify(plan, null, 2)}\n`);
     writeFileSync(join(dir, 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`);
-    render(dir); renderReview(dir);
+    profile.render(dir);
     if (inc) updateTriage(dir, { outcome: 'incremental', findings: rc.findingsReport });
     snapshotRun(dir, { registry, plan, level, decisionsDigest, keep: cfg.triage.keepRuns });
     writeStatus(dir, { stage: 'done', loop, result: 'passed', sourcesDigest: registry.digest, level, decisionsDigest, workplanDigest: sha256(canonical(plan)), stages: stats, usage: usage(), changedIds: changedIds(prevPlan, plan), removedQuestions: rc.removed });
@@ -554,46 +477,10 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     return { ok: true, loop, plan };
   }
 
-  discard(dir);
+  discard(dir, profile);
   writeStatus(dir, { stage: 'failed', loop: limits.loopAttempts, result: 'failed', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats, usage: usage(), violations: lastViolations });
   deps.log('LOOP', `전체 ${limits.loopAttempts}회 안에 통과하지 못했다 — 파생 산출물을 삭제했다(원본·결정은 보존). 마지막 시도는 failed/ 에 있다`);
   return { ok: false, violations: lastViolations };
 }
 
 export const listFailed = (dir) => (existsSync(join(dir, 'failed')) ? readdirSync(join(dir, 'failed')) : []);
-
-export function conformanceGate(dir, facts) {
-  const draft = tryJson(join(dir, 'stages', 'conformance.json'));
-  const violations = judgmentErrors(draft, facts);
-  return { violations, value: violations.length ? draft : groundJudgments(draft, facts) };
-}
-
-// S8의 의미 판정은 이 러너가 별도 역할 세션으로 실행한다.
-export function runConformance(rawDir, opts = {}, injected = {}) {
-  const dir = resolve(rawDir); const facts = readJson(join(dir, 'conformance-facts.json'));
-  const { digest, ...body } = facts;
-  if (sha256(canonical(body)) !== digest) throw new Error('conformance-facts digest 불일치');
-  if (!Array.isArray(facts.facts) || !facts.facts.length) throw new Error('판정할 렌더·코드 사실이 없음');
-  const cfg = loadConfig(dir, opts.env ?? process.env);
-  const fingerprint = sha256(canonical({ facts: digest, role: role('conformance'), contract: sha256(readFileSync(new URL('./conformance.mjs', import.meta.url))), config: cfg.stages.conformance }));
-  const save = (report) => {
-    writeFileSync(join(dir, 'conformance.json'), `${JSON.stringify(report, null, 2)}\n`);
-    writeFileSync(join(dir, 'conformance-brief.md'), conformanceBrief(report));
-    appendConformanceReview(dir, report);
-    return { ok: report.status === 'passed', needsInput: report.status === 'needs-judgment' ? [report.reason] : undefined, report };
-  };
-  const old = tryJson(join(dir, 'conformance.json'));
-  const oldBody = old ? Object.fromEntries(Object.entries(old).filter(([k]) => k !== 'digest')) : null;
-  if (!opts.force && old?.judgmentFingerprint === fingerprint && sha256(canonical(oldBody)) === old.digest && old.status === (old.rows.some(r => BLOCKING.has(r.verdict)) ? 'failed' : 'passed') && judgmentErrors(old, facts).length === 0) return save(old);
-  const registry = readJson(join(dir, 'sources.json'));
-  mkdirSync(join(dir, 'stages'), { recursive: true });
-  const stat = newStat();
-  const r = runStage({ name: 'conformance', dir, registry, cfg: { ...cfg.stages.conformance, session: 'fresh' }, limits: cfg.limits, deps: { runAgent: injected.runAgent ?? realRunAgent, log: injected.log ?? ((s, m) => process.stdout.write(`[${s}] ${m}\n`)) }, ctx: {}, gate: () => conformanceGate(dir, facts), outFile: 'conformance.json', stat, chain: { ids: {}, started: {} } });
-  const rows = r.ok ? r.value.rows : [];
-  const status = r.ok ? rows.some(x => BLOCKING.has(x.verdict)) ? 'failed' : 'passed' : 'needs-judgment';
-  const report = { schemaVersion: 1, kind: 'Conformance', status, factsDigest: digest, inputDigests: facts.inputDigests, judgmentFingerprint: fingerprint, rows, facts: facts.facts,
-    ...(r.ok ? {} : { reason: r.needsInput?.join(' / ') ?? r.violations.join('\n') }), counts: Object.fromEntries([...new Set(rows.map(x => x.verdict))].sort().map(v => [v, rows.filter(x => x.verdict === v).length])) };
-  report.digest = sha256(canonical(report));
-  writeStatus(dir, { ...tryJson(join(dir, 'run-status.json')), conformance: { result: status, factsDigest: digest, attempts: r.attempts, usage: stat, violations: r.violations ?? [] } });
-  return save(report);
-}

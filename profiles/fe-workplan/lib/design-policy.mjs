@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { canonical, sha256 } from '../register.mjs';
+import { canonical, sha256 } from '../../../scripts/register.mjs';
 
 export function readDesignSpecs(dir, registry) {
   const statusFile = join(dir, 'design-spec-status.json');

@@ -7,18 +7,17 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { canonical, sha256 } from './register.mjs';
+import { decidableSections, profileForPlan } from './lib/profile.mjs';
 
 export const STANCES = ['follow-existing', 're-review', 'ask-plan', 'ask-design', 'ask-backend', 'decided'];
-const SECTIONS = ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'gaps', 'questions', 'decisions', 'tasks', 'findings'];
-
 export const indexItems = (plan) => {
   const items = new Map();
-  for (const key of SECTIONS) for (const item of plan[key] ?? []) if (item.id) items.set(item.id, item);
+  for (const key of decidableSections(profileForPlan(plan))) for (const item of plan[key] ?? []) if (item.id) items.set(item.id, item);
   return items;
 };
 
 export const itemDigest = (item) => sha256(canonical(item)).slice(0, 12);
-const sectionOf = (plan, id) => SECTIONS.find((key) => (plan[key] ?? []).some((item) => item.id === id));
+const sectionOf = (plan, id) => decidableSections(profileForPlan(plan)).find((key) => (plan[key] ?? []).some((item) => item.id === id));
 
 export const readDecisions = (caseDir) => {
   const path = join(caseDir, 'decisions.json');

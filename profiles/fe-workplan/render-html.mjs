@@ -1,5 +1,5 @@
 // S6 render (HTML) — workplan.json 을 단일 HTML 로 렌더한다. 외부 리소스 없이 열린다.
-import { canonical, sha256 } from './register.mjs';
+import { canonical, sha256 } from '../../scripts/register.mjs';
 import { dsMatchLabel } from './lib/labels.mjs';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

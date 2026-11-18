@@ -7,16 +7,17 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonical, sha256 } from '../register.mjs';
+import { profileForPlan, reviewedSections } from './profile.mjs';
 
 export const DEFAULTS = { maxChangedRatio: 0.5, maxRemoved: 1, keepRuns: 10 };
 export const SCOPE_ROLES = ['plan', 'design']; // 범위(scope.json)의 경계를 정하는 입력 — 바뀌면 범위부터 다시 잡는다
-export const SECTIONS = ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'gaps', 'questions', 'tasks'];
 export const ACTIONS = ['skip', 'incremental', 'rewrite'];
 
 const tryJson = (file) => { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; } };
 
 // 항목 id → 내용 digest. 증분 게이트가 "영향받지 않은 항목이 그대로인가"를 바이트(정규형) 단위로 비교하는 기준이다.
-export const itemIds = (plan) => new Map(SECTIONS.flatMap((k) => (plan?.[k] ?? []).map((i) => [i.id, sha256(canonical(i))])));
+const sectionsOf = (plan) => reviewedSections(profileForPlan(plan));
+export const itemIds = (plan) => new Map(sectionsOf(plan).flatMap((k) => (plan?.[k] ?? []).map((i) => [i.id, sha256(canonical(i))])));
 
 // ── 스냅샷 ──────────────────────────────────────────────────────────────────
 const runs = (dir) => (existsSync(join(dir, 'history')) ? readdirSync(join(dir, 'history')).filter((n) => /^\d{3,}-[0-9a-f]{8}$/.test(n)).sort() : []);
@@ -65,7 +66,7 @@ export function buildDelta(registry, snap) {
   const changed = [...now.values()].filter((s) => before.has(s.id) && (before.get(s.id).sha256 !== s.sha256 || before.get(s.id).role !== s.role)).map(row);
   const touched = new Set([...changed, ...removed].map((x) => x.id));
   // 영향 후보: 바뀌거나 사라진 입력을 근거(sourceId)로 든 이전 계획서의 항목. 새로 추가된 입력은 근거가 없으므로 후보를 정할 수 없다 — triage 가 판단한다.
-  const candidateIds = SECTIONS.flatMap((k) => snap.plan[k] ?? []).filter((item) => [...sourceIdsIn(item)].some((id) => touched.has(id))).map((i) => i.id).sort();
+  const candidateIds = sectionsOf(snap.plan).flatMap((k) => snap.plan[k] ?? []).filter((item) => [...sourceIdsIn(item)].some((id) => touched.has(id))).map((i) => i.id).sort();
   const total = new Set([...before.keys(), ...now.keys()]).size;
   return { schemaVersion: 1, kind: 'InputDelta', previous: snap.runId, added, changed, removed, unchanged: total - added.length - changed.length - removed.length,
     changedRatio: total ? Math.round(((added.length + changed.length + removed.length) / total) * 1000) / 1000 : 0, candidateIds };
@@ -115,13 +116,14 @@ export function preservedViolations(before, after, impact) {
   return out;
 }
 
-// 증분 비평의 범위: 영향 항목 + 새로 생긴 항목, 그리고 그 항목들이 속한 화면.
+// 증분 비평의 범위: 영향 항목 + 새로 생긴 항목, 그리고 그 항목들이 속한 분류 단위(프로파일의 unit — 예: 화면).
 export function criticScope(before, after, impact) {
+  const { unit } = profileForPlan(after);
   const old = itemIds(before);
   const ids = new Set([...impact, ...[...itemIds(after).keys()].filter((id) => !old.has(id))]);
-  const scoped = SECTIONS.flatMap((k) => after[k] ?? []).filter((i) => ids.has(i.id));
-  const surfaces = new Set([...scoped.map((i) => i.surface), ...(after.surfaces ?? []).filter((x) => ids.has(x.id)).map((x) => x.id)].filter(Boolean));
-  return { ids, surfaces };
+  const scoped = sectionsOf(after).flatMap((k) => after[k] ?? []).filter((i) => ids.has(i.id));
+  const units = new Set([...scoped.map((i) => i[unit.ref]), ...(after[unit.section] ?? []).filter((x) => ids.has(x.id)).map((x) => x.id)].filter(Boolean));
+  return { ids, units };
 }
 
 // 지적 id 는 스크립트가 매긴다 — 이미 쓰인 F- id(이전 지적, 사용자 결정을 이어받은 계획서 항목 등) 뒤로 이어 붙여 겹치지 않게 한다.

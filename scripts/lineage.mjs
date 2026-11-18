@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { canonical, sha256, previousDir } from './register.mjs';
 import { indexItems } from './decide.mjs';
+import { profileForPlan } from './lib/profile.mjs';
 
 const REGION_TYPES = new Set(['title', 'h1', 'h2', 'h3', 'screen-key', 'data-screen', 'data-panel', 'comment-marker', 'heading1', 'heading2', 'heading3']);
 const MAX = 200;
@@ -90,7 +91,7 @@ export function buildLineage(caseDir) {
     sources,
     decisions: prevDecisions.map((d) => ({ id: d.id, stance: d.stance, note: d.note, subject: subject(items.get(d.id)) })).sort((a, b) => a.id.localeCompare(b.id)),
     openQuestions: (prevPlan.questions ?? []).filter((q) => !decided.has(q.id)).map((q) => ({ id: q.id, to: q.to, question: q.question, options: q.options ?? [], assumption: q.assumption, impact: q.impact ?? [] })).sort((a, b) => a.id.localeCompare(b.id)),
-    inferred: ['requirements', 'states'].flatMap((k) => (prevPlan[k] ?? []).filter((x) => x.basis === 'inferred').map((x) => ({ id: x.id, section: k, question: x.question, subject: subject(x) }))).sort((a, b) => a.id.localeCompare(b.id)),
+    inferred: profileForPlan(prevPlan).inferable.flatMap((k) => (prevPlan[k] ?? []).filter((x) => x.basis === 'inferred').map((x) => ({ id: x.id, section: k, question: x.question, subject: subject(x) }))).sort((a, b) => a.id.localeCompare(b.id)),
   };
   lineage.digest = sha256(canonical(lineage));
   writeFileSync(join(caseDir, 'lineage.json'), `${JSON.stringify(lineage, null, 2)}\n`);

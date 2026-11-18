@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { runPipeline } from './lib/pipeline.mjs';
-import { validate } from './validate.mjs';
+import { validate } from '../profiles/fe-workplan/validate.mjs';
 import { decide } from './decide.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';

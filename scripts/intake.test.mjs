@@ -42,6 +42,8 @@ test('분류: 거부 사유를 모아서 알려 준다', () => {
   const text = bad.errors.join('\n');
   assert.ok(text.includes('case 는 영문 소문자') && text.includes('읽을 수 없는 형식') && text.includes('경로가 없음') && text.includes('git 레포가 아닌 폴더') && text.includes('role 은'));
   assert.ok(text.includes('plan(기획) 역할의 자료가 없다'));
+  assert.ok(classify({ case: 'c1', purpose: 'no-such', items: [{ path: m.plan, role: 'plan' }] }).errors.some((e) => e.includes('purpose 는')));
+  assert.deepEqual(classify({ case: 'c1', purpose: 'fe-workplan', items: [{ path: m.plan, role: 'plan' }] }).errors, []);
 });
 
 test('분류: 한글 파일명은 역할-순번 id 로, 없는 역할은 경고로 알린다', () => {

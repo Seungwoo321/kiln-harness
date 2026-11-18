@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const RUNTIME_ENTRIES = ['package.json', 'kh.config.json', 'scripts', 'roles', 'docs'];
+export const RUNTIME_ENTRIES = ['package.json', 'kh.config.json', 'scripts', 'roles', 'profiles', 'docs'];
 const MARK = 'KH_RUNTIME_SNAPSHOT';
 
 const filesUnder = (root, p) => {

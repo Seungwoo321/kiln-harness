@@ -65,7 +65,7 @@ S5는 출처 분류의 존재와 실재 근거를 검사한다. 분류의 적합
 2. 시안 요소별로 텍스트 등이 같은 구현 후보와 수치 차이를 제시한다. 종류 차이는 비교 항목이며 후보를 제거하지 않는다. 기준 렌더 후보는 같은 태그와 공유 클래스 수를 제공하며 파일명으로 대응을 정하지 않는다.
 3. JSX의 className 원문·정적 문자열의 모든 클래스 토큰과 CSS 토큰 선언을 수집한다. 동적 표현식은 원문으로 남기며 평가하지 않는다. 토큰 검색 범위는 searched:{root,extensions,excluded}로 기록한다. 검색 범위는 코드 레포의 추적·비무시 CSS이며 패키지·다른 확장자의 선언을 포함하지 않는다.
 4. conformance-facts.json에 사실·후보·digest를 기록한다.
-5. scripts/run.mjs가 roles/conformance.md를 별도 claude 또는 codex 세션으로 실행한다.
+5. scripts/run.mjs가 profiles/fe-workplan/roles/conformance.md를 별도 claude 또는 codex 세션으로 실행한다.
 6. 형식 게이트는 모든 사실에 판정과 실재 근거가 있는지 검사한다. 위반은 다음 시도에 주입한다.
 7. 검증된 판정을 conformance.json·review.html·conformance-brief.md로 렌더한다.
 

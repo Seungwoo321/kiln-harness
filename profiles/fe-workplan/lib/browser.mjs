@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { join, resolve, relative, extname, isAbsolute } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { sha256 } from '../register.mjs';
+import { sha256 } from '../../../scripts/register.mjs';
 
 export function findChrome(env = process.env) {
   if (env.KH_CHROME !== undefined) return existsSync(env.KH_CHROME) ? env.KH_CHROME : null;

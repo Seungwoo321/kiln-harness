@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validate } from './validate.mjs';
-import { decide, remove, staleDecisions } from './decide.mjs';
+import { decide, remove, staleDecisions } from '../../scripts/decide.mjs';
 import { renderReview } from './render-review.mjs';
 
 const ref = [{ sourceId: 'plan1', locator: 'L1-2' }];
