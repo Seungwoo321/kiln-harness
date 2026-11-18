@@ -26,7 +26,7 @@ const draftOut = () => ({
   apiBindings: [], i18n: [], gaps: [{ id: 'G1', surface: 'S1', current: 'c', target: 't' }], questions: [],
   tasks: [{ id: 'T1', title: '작업', files: ['src/a.tsx'], dependsOn: [], covers: ['S1', 'C1', 'R1', 'ST1', 'G1'], changeKind: 'new-page' }],
 });
-const criticOut = () => ({ findings: [{ id: 'F-001', severity: 'medium', origin: 'design', target: 'R1', message: 'm', evidence: 'plan1 L1', recommendation: 'r', stance: 'ask-design' }] });
+const criticOut = () => ({ findings: [{ id: 'F-001', severity: 'medium', origin: 'design', target: 'R1', message: 'm', evidence: 'plan1 L1', recommendation: 'r', stance: 'ask-design', ask: { undecided: 'u', whyExternal: 'w', affects: ['R1'] } }] });
 
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'kh-pipe-'));

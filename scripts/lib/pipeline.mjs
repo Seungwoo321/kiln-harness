@@ -155,12 +155,31 @@ export function applyQuestionVerdicts(plan, demoted, dropped) {
 }
 
 // inc(증분 실행)이면 비평 범위(inc.scope) 안의 질문·화면만 판정·대조하고, 범위 밖 이전 지적은 이월한다.
+// 담당자에게 넘기는 지적(ask-*)은 코드·계약으로 정할 수 없는 미결정만이다. 무엇이 미결정인지, 왜 외부가 정해야 하는지, 답에 따라 달라지는
+// 계획서 항목을 적게 한다. 백엔드 영향 주장은 입력·저장·소비·콜백 경계를 실제로 따라간 path:line 이 있어야 한다 — 필드 이름 검색이나 UI 차이만으로는 영향 주체를 정하지 않는다.
+export function askViolations(f, w, planIds) {
+  if (!String(f.stance ?? '').startsWith('ask-')) return [];
+  const a = f.ask;
+  if (!a || typeof a !== 'object') return [`${w}: ${f.stance} 는 ask{undecided, whyExternal, affects, trace?} 가 필요함 — 코드·계약으로 정할 수 있는 구현 책임은 follow-existing·re-review 로 남긴다`];
+  const out = [];
+  if (!String(a.undecided ?? '').trim()) out.push(`${w}: ask.undecided(실제로 미결정인 것)가 없음`);
+  if (!String(a.whyExternal ?? '').trim()) out.push(`${w}: ask.whyExternal(코드·계약·원본으로 정할 수 없는 이유)이 없음`);
+  if (!Array.isArray(a.affects) || !a.affects.length) out.push(`${w}: ask.affects(답에 따라 달라지는 계획서 항목 id)가 없음`);
+  else for (const id of a.affects) if (!planIds.has(id)) out.push(`${w}: ask.affects 가 계획서에 없는 id 를 가리킴 — ${id}`);
+  const trace = Array.isArray(a.trace) ? a.trace : [];
+  if (trace.some((t) => !/\S+:\d+/.test(String(t)))) out.push(`${w}: ask.trace 의 각 항목은 path:line 이어야 함`);
+  if (f.stance === 'ask-backend' && !trace.length) out.push(`${w}: ask-backend 는 ask.trace(입력·저장·소비·콜백 경계를 따라간 path:line)가 필요함`);
+  return out;
+}
+
 export function criticGate(dir, registry, plan, inc = null) {
   const crit = tryJson(join(dir, 'stages', 'critic.json'));
   if (!crit || !Array.isArray(crit.findings)) return { violations: ['stages/critic.json 이 없거나 findings 배열이 없음'] };
   const out = [];
+  const planIds = itemIds(plan);
   crit.findings.forEach((f, i) => {
     if (!f.evidence) out.push(`findings[${i}]: evidence(원본·코드 위치 근거)가 없음`);
+    out.push(...askViolations(f, `findings[${i}]`, planIds));
     if (inc && !inc.scope.ids.has(f.target)) out.push(`findings[${i}]: 증분 비평은 영향·신규 항목만 대상으로 한다 — ${f.target} (범위: ${[...inc.scope.ids].join(', ')})`);
   });
 
