@@ -16,7 +16,8 @@ import { readDecisions, indexItems } from '../decide.mjs';
 import { runAgent as realRunAgent } from './runner.mjs';
 import { createLive, createTicker, logLine } from './live.mjs';
 import { DEFAULT_LEVEL, parseLevel } from './levels.mjs';
-import { loadProfile, profileForPlan } from './profile.mjs';
+import { loadProfile, profileForPlan, decidableSections } from './profile.mjs';
+import { scopeConditionViolations, planConditionViolations, carryConditions, conditionBrief } from './conditions.mjs';
 import { DEFAULTS as TRIAGE_DEFAULTS, itemIds, latestSnapshot, snapshotRun, buildDelta, guardrails, triageViolations, preservedViolations, criticScope, mergeFindings, numberFindings } from './triage.mjs';
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -51,17 +52,20 @@ export function loadConfig(dir, env = process.env) {
 }
 
 // ── 게이트 (결정적) ─────────────────────────────────────────────────────────
-const ENVELOPE = ['schemaVersion', 'kind', 'caseId', 'inputDigests', 'findings', 'level'];
-export function assemblePlan(registry, draft, findings, level, profile) {
+const ENVELOPE = ['schemaVersion', 'kind', 'caseId', 'inputDigests', 'findings', 'level', 'conditions'];
+// 조건 원본의 추출 결과(문장 목록 포함)
+export const readExtracts = (dir, registry) => Object.fromEntries(registry.sources.map((s) => [s.id, tryJson(join(dir, 'extract', `${s.id}.json`))]));
+export function assemblePlan(registry, draft, findings, level, profile, conditions = []) {
   const body = Object.fromEntries(Object.entries(draft).filter(([k]) => !ENVELOPE.includes(k)));
-  return { schemaVersion: profile.schemaVersion, kind: profile.kind, caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), level, ...body, findings };
+  return { schemaVersion: profile.schemaVersion, kind: profile.kind, caseId: registry.caseId, inputDigests: registry.sources.map((s) => s.sha256), level, ...body, conditions, findings };
 }
 
 // 해석 초안을 envelope 로 감싸고 프로파일 게이트에 넘긴다.
 export function interpretGate(dir, registry, scope, level = DEFAULT_LEVEL, profile = loadProfile(dir)) {
   const draft = tryJson(join(dir, 'stages', 'workplan.draft.json'));
   if (!draft) return { violations: ['stages/workplan.draft.json 이 없거나 JSON 이 아님'] };
-  return profile.gates.interpret({ dir, registry, scope, draft, plan: assemblePlan(registry, draft, [], level, profile) });
+  const g = profile.gates.interpret({ dir, registry, scope, draft, plan: assemblePlan(registry, draft, [], level, profile, scope.conditions ?? []) });
+  return { ...g, violations: [...g.violations, ...planConditionViolations(g.value, decidableSections(profile))] };
 }
 
 // 원본이 이미 답한 질문은 질문이 아니라 결정(decisions)으로 내린다 — 비평이 'demote' 로 판정하고 근거(decision)를 단 질문이 대상이다.
@@ -86,6 +90,7 @@ export function applyQuestionVerdicts(plan, demoted, dropped) {
   }
   for (const q of next.questions) q.impact = (q.impact ?? []).filter((id) => !gone.has(id));
   profile.prune(next, gone);
+  carryConditions(next, plan, demoted, dropped);
   for (const x of next.lineage?.resolved ?? []) {
     if (x.status === 'still-open' && demoted.has(x.question)) {
       x.status = 'resolved'; x.evidence = demoted.get(x.question).sourceRefs; x.note = `${x.note} (비평 단계에서 원본이 이미 답한 것으로 확인 — D-${x.question})`; delete x.question;
@@ -168,7 +173,7 @@ export function criticGate(dir, registry, plan, inc = null) {
     ({ findings, report } = mergeFindings(inc.prev.findings ?? [], findings, inc.scope, new Set(itemIds(applied).keys()), inc.previousRunId, taken));
   }
   const merged = { ...applied, findings, ...profile.criticFields({ plan, crit, inc }) };
-  out.push(...profile.validate(dir, merged)); // 내려온 decision 의 근거·남긴 질문의 기준(두 원본 위치·증거·찾아본 범위)은 여기서 결정적으로 검사된다
+  out.push(...profile.validate(dir, merged), ...planConditionViolations(merged, decidableSections(profile))); // 내려온 decision 의 근거·남긴 질문의 기준(두 원본 위치·증거·찾아본 범위)은 여기서 결정적으로 검사된다
   return { violations: out, value: merged, removed: [...gone], findingsReport: report };
 }
 
@@ -201,7 +206,7 @@ export function buildPrompt(stage, ctx) {
   if (own) return own(ctx, feedbackBlock);
   const head = `사례 폴더(작업 디렉터리)에서 작업한다. Bash 에서 'cd' 로 작업 디렉터리를 바꾸지 않는다(다른 폴더는 절대경로·git -C 로 읽는다) — 바뀌면 결과 파일 쓰기가 거부된다. 읽을 파일: sources.json, extract/*.json, references.json. 역할 파일의 입출력 계약을 따른다.${ctx.catalog ? catalogText(ctx.catalog) : ''}`;
   const lin = ctx.lineage ? lineageBlock(stage, ctx.lineage) : '';
-  const tail = lin + ctx.profile.prompt.extras(stage, ctx) + ctx.profile.levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
+  const tail = lin + (ctx.registry ? conditionBrief(stage, ctx.registry, ctx.profile, ctx.extracts) : '') + ctx.profile.prompt.extras(stage, ctx) + ctx.profile.levelBlock(stage, ctx.level ?? DEFAULT_LEVEL) + feedbackBlock('이전 시도의 위반 — 모두 해소한다', ctx.feedback) + feedbackBlock('지난 전체 시도에서 배운 것 — 같은 실수를 반복하지 않는다', ctx.lessons);
   if (stage === 'scope') return `${head}\n결과: stages/scope.json${tail}`;
   if (stage === 'interpret') {
     const decisions = ctx.decisions.length ? `\n\n[사용자 결정 — 확정값]\n${ctx.decisions.map((d) => `- ${d.id} (${d.stance}): ${d.note}`).join('\n')}` : '';
@@ -291,6 +296,7 @@ function upToDate(dir, registry, decisionsDigest, level, profile) {
   if (!status || !plan || status.result !== 'passed' || status.decisionsDigest !== decisionsDigest || (status.level ?? DEFAULT_LEVEL) !== level) return false;
   if (plan.schemaVersion < 2 || !Array.isArray(plan.findings)) return false;
   if (!profile.upToDate(dir, registry, plan)) return false;
+  if (!Array.isArray(plan.conditions) || planConditionViolations(plan, decidableSections(profile)).length) return false; // 조건 커버리지 계약 이전의 계획서
   return [...plan.inputDigests].sort().join() === registry.sources.map((s) => s.sha256).sort().join() && profile.validate(dir).length === 0;
 }
 
@@ -347,6 +353,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   rmSync(join(dir, 'lineage.json'), { force: true });
   for (const f of ['triage.json', 'delta.json']) rmSync(join(dir, f), { force: true }); // 이번 실행의 판정만 남긴다
   const catalog = buildCatalog(dir, profile);
+  const extracts = readExtracts(dir, registry);
   deps.log('S2c', `참조 카탈로그: ${catalog.sources.length}건${catalog.missingRoles.length ? ` · 없는 역할 ${catalog.missingRoles.join(', ')}` : ''}`);
   const lineage = registry.lineage ? buildLineage(dir) : null;
   if (lineage) deps.log('S2b', `계보: 이전 ${lineage.previous.caseId} · 결정 ${lineage.decisions.length} · 열린 확인 요청 ${lineage.openQuestions.length} · 원본 ${lineage.sources.map((s) => `${s.sourceId}:${s.status}`).join(' ')}`);
@@ -378,7 +385,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   let incremental = null;
   let triageStat = null;
   if (!force && !sameSources && !levelChanged && !registry.lineage && prev?.result === 'passed' && prevPlan?.schemaVersion >= 3 && existsSync(join(dir, 'scope.json'))
-    && snap && snap.meta.workplanDigest === sha256(canonical(prevPlan)) && snap.meta.level === level) {
+    && Array.isArray(prevPlan.conditions) && snap && snap.meta.workplanDigest === sha256(canonical(prevPlan)) && snap.meta.level === level) {
     const t = triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged: prev.decisionsDigest !== decisionsDigest, profile });
     triageStat = t.stat;
     if (t.action === 'skip') {
@@ -392,8 +399,9 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     }
     if (t.action === 'incremental') incremental = { impactIds: t.impactIds, previousRunId: snap.runId, prev: { findings: prevPlan.findings ?? [], plan: prevPlan } };
   }
-  const reuseScope = !force && (sameSources || incremental) && existsSync(join(dir, 'scope.json')) && prevPlan?.schemaVersion >= 2;
-  const baseScope = reuseScope ? readJson(join(dir, 'scope.json')) : null;
+  const savedScope = !force && (sameSources || incremental) && existsSync(join(dir, 'scope.json')) && prevPlan?.schemaVersion >= 2 ? readJson(join(dir, 'scope.json')) : null;
+  const reuseScope = Array.isArray(savedScope?.conditions); // 조건 커버리지 계약 이전의 범위는 다시 잡는다
+  const baseScope = reuseScope ? savedScope : null;
 
   const stats = Object.fromEntries(STAGES.map((s) => [s, { ...newStat(), result: 'pending' }]));
   if (triageStat) stats.triage = { ...triageStat, result: incremental ? 'incremental' : 'rewrite' };
@@ -430,7 +438,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
       deps.log('LOOP', `${stage} 단계가 ${r.attempts}회 안에 통과하지 못했다 — 파생 산출물을 지우고 처음부터 다시 시작한다`);
     };
     const stage = (name, extra) => {
-      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, profile, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
+      const r = runStage({ name, dir, registry, cfg: cfg.stages[name], limits, deps, ctx: { decisions, lessons, basePlan, lineage, catalog, level, profile, registry, extracts, ...extra.ctx }, gate: extra.gate, outFile: extra.outFile, stat: stats[name], chain });
       stats[name].result = r.ok ? 'passed' : 'failed'; stats[name].attempts = r.attempts;
       writeStatus(dir, { stage: name, loop, result: 'running', sourcesDigest: registry.digest, level, decisionsDigest, stages: stats }); // 단계마다 기록 — 중단돼도 어디까지 갔는지 남는다
       return r;
@@ -440,7 +448,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     let scope = baseScope;
     if (scope) { stats.scope.result = 'reused'; mkdirSync(join(dir, 'stages'), { recursive: true }); writeFileSync(join(dir, 'stages', 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`); deps.log('S3', '원본이 그대로라 이전 범위(scope.json)를 이어받는다'); }
     else {
-      const r = stage('scope', { gate: () => profile.gates.scope(dir, registry, lineage), outFile: 'scope.json', ctx: {} });
+      const r = stage('scope', { gate: () => { const g = profile.gates.scope(dir, registry, lineage); return g.value ? { ...g, violations: [...g.violations, ...scopeConditionViolations(g.value, registry, profile, extracts)] } : g; }, outFile: 'scope.json', ctx: {} });
       if (r.needsInput) return needInput('scope', r);
       if (!r.ok) { fail('scope', r); continue; }
       scope = r.value; stats.scope.result = 'passed';
@@ -465,7 +473,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
     stats.critic.result = 'passed';
 
     const plan = rc.value;
-    const finalErrors = profile.validate(dir, plan);
+    const finalErrors = [...profile.validate(dir, plan), ...planConditionViolations(plan, decidableSections(profile))];
     if (finalErrors.length) { fail('critic', { attempts: 0, violations: finalErrors }); continue; }
     writeFileSync(join(dir, 'workplan.json'), `${JSON.stringify(plan, null, 2)}\n`);
     writeFileSync(join(dir, 'scope.json'), `${JSON.stringify(scope, null, 2)}\n`);

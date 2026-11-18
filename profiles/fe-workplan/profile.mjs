@@ -63,6 +63,7 @@ export default {
   unit: { section: 'surfaces', ref: 'surface', label: '화면' },
   sections: ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'gaps', 'tasks'],
   inferable: ['requirements', 'states'],
+  conditionRoles: ['plan'], // 조건 커버리지 계약: 문장을 모두 분류해야 하는 원본 역할
   derived: ['WORKPLAN.md', 'WORKPLAN.html', 'review.html', 'conformance.json', 'conformance-brief.md'],
   roleWarnings: ROLE_WARNINGS,
   role: (name) => readFileSync(join(HERE, 'roles', `${name}.md`), 'utf8'),

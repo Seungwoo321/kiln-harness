@@ -11,6 +11,8 @@ import { dsMatchLabel } from './lib/labels.mjs';
 import { canonical, sha256 } from '../../scripts/register.mjs';
 import { readDecisions, staleDecisions } from '../../scripts/decide.mjs';
 import { conformanceSection } from './lib/conformance-view.mjs';
+import { conditionCoverage } from '../../scripts/lib/conditions.mjs';
+import { decidableSections, profileForPlan } from '../../scripts/lib/profile.mjs';
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const text = (v) => esc(typeof v === 'string' ? v : JSON.stringify(v)).replace(/\n/g, '<br>');
@@ -38,6 +40,7 @@ export function renderReview(caseDir) {
     return d ? `<div class="decision${stale.has(id) ? ' stale' : ''}"><b>${esc(STANCE_LABEL[d.stance])}</b>${stale.has(id) ? ' · 항목이 바뀜, 재확인' : ''}<br>${text(d.note)}</div>` : '';
   };
   const idCell = (id) => `<td class="idc"><code class="id" id="${esc(id)}">${esc(id)}</code>${decisionBadge(id)}</td>`;
+  const residualBlock = (r) => (!r ? '' : `<div class="ev">${(r.obligations ?? []).length ? `남는 의무: ${r.obligations.map((o) => `${text(o.statement)}${(o.handledBy ?? []).length ? ` → ${o.handledBy.map((id) => `<a href="#${esc(id)}">${esc(id)}</a>`).join(', ')}` : ''}`).join('; ')}` : `남는 의무 없음: ${text(r.none)}`}</div>`);
   const refs = (rs = []) => rs.map((r) => `<code>${esc(r.sourceId)}</code> ${esc(r.locator)}`).join('<br>');
   const basis = (x) => (x.resolution === 'pending' ? '<span class="tag warn">확인 필요</span>' : x.basis === 'inferred' ? `<span class="tag warn">추론</span> ${esc(x.question ?? x.decision)}` : '<span class="tag">원본</span>');
   const table = (head, rows) => (rows.length === 0 ? '<p class="none">없음</p>'
@@ -103,7 +106,15 @@ export function renderReview(caseDir) {
       p.decisions.map((d) => row(d.id, [`<span class="tag">${esc(DK[d.kind] ?? d.kind)}</span>`, text(d.statement), text(d.rationale), refs(d.sourceRefs)]))), '질문이 아니다 — 담당자에게 전달하지 않는다.'));
   }
   parts.push(section('scope', '범위', table(['id', '화면', '진입', '구분', '출처'], p.surfaces.map((s) => row(s.id, [text(s.title), text(s.entry), esc(s.change), refs(s.sourceRefs)])))
-    + `<h3>제외</h3>${table(['대상', '이유', '출처'], (p.excluded ?? []).map((x) => `<tr><td>${text(x.title)}</td><td>${text(x.reason)}</td><td>${refs(x.sourceRefs)}</td></tr>`))}`));
+    + `<h3>제외</h3>${table(['대상', '이유', '출처'], (p.excluded ?? []).map((x) => `<tr><td>${text(x.title)}</td><td>${text(x.reason)}${residualBlock(x.residual)}</td><td>${refs(x.sourceRefs)}</td></tr>`))}`));
+  if (Array.isArray(p.conditions)) {
+    const link = (id) => `<a href="#${esc(id)}">${esc(id)}</a>`;
+    parts.push(section('conditions', '조건 커버리지 — 원본 조건이 어디서 처리됐나', table(['조건', '내용', '출처', '처리'],
+      conditionCoverage(p, decidableSections(profileForPlan(p))).map((c) => `<tr><td><code class="id" id="${esc(c.id)}">${esc(c.id)}</code></td><td>${text(c.text)}</td><td>${refs(c.sourceRefs)}</td><td>${[
+        ...(c.handledBy.length ? [`<span class="tag kind">항목</span> ${c.handledBy.map(link).join(', ')}`] : []),
+        ...c.excluded.map((x) => `<span class="tag warn">제외</span> ${text(x.title)}${x.obligations.length ? ` → 남는 의무 ${x.obligations.map((o) => `${text(o.statement)} (${(o.handledBy ?? []).map(link).join(', ')})`).join('; ')}` : ` → 남는 의무 없음: ${text(x.none)}`}`),
+      ].join('<br>')}</td></tr>`)), '원본의 조건 문장은 모두 조건 또는 비조건으로 분류되고, 조건은 모두 처리 항목이나 제외(남는 의무 포함)로 이어진다.'));
+  }
   parts.push(section('requirements', '요구사항', table(['id', '화면', '요구사항', '수용기준', '근거', '출처'],
     p.requirements.map((r) => row(r.id, [surfaceTitle(r.surface), text(r.statement), list(r.acceptance), basis(r), refs(r.sourceRefs)])))));
   parts.push(section('states', '상태', table(['id', '화면', '구역', '상태', '조건', '표시', '동작', '근거'],
@@ -129,7 +140,7 @@ export function renderReview(caseDir) {
     if (!p.designSpecDigests || report.inputDigests?.every(d => p.designSpecDigests.includes(d))) parts.push(conformanceSection(report));
   }
 
-  const nav = [['kinds', '변경 유형'], ...(v2 ? [['findings', '지적']] : []), ...(p.lineage ? [['lineage', '계보']] : []), ['questions', '전달'], ...(v2 ? [['decisions', '결정 기록']] : []), ['scope', '범위'], ['requirements', '요구사항'], ['states', '상태'], ['components', '컴포넌트'], ['api', 'API'], ['i18n', '다국어'], ['gaps', '차이']]
+  const nav = [['kinds', '변경 유형'], ...(v2 ? [['findings', '지적']] : []), ...(p.lineage ? [['lineage', '계보']] : []), ['questions', '전달'], ...(v2 ? [['decisions', '결정 기록']] : []), ['scope', '범위'], ...(Array.isArray(p.conditions) ? [['conditions', '조건']] : []), ['requirements', '요구사항'], ['states', '상태'], ['components', '컴포넌트'], ['api', 'API'], ['i18n', '다국어'], ['gaps', '차이']]
     .map(([k, l]) => `<a href="#sec-${k}">${l}</a>`).join('');
   const digest = sha256(canonical(p)).slice(0, 12);
 

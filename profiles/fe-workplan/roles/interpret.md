@@ -18,7 +18,8 @@
 
 필드: `title` `summary`(3줄 이내) `newFiles` `surfaces` `excluded` `requirements` `states` `components` `apiBindings` `i18n` `gaps` `questions` `tasks` `decisions` `designSpecs` `planObservations`.
 
-- `surfaces`·`excluded` 는 `stages/scope.json` 과 같다(화면을 더하거나 빼지 않는다).
+- `surfaces`·`excluded` 는 `stages/scope.json` 과 같다(화면을 더하거나 빼지 않는다). `excluded[].residual.obligations` 에는 그 의무를 다루는 요구사항·질문 id 를 `handledBy` 로 더한다.
+- 범위의 조건(`conditions`)은 모두 처리한다 — 조건을 다루는 항목에 `conditions: ["C-.."]` 를 단다. 화면이 없는 조건의 의무도 요구사항(대상 시스템의 데이터·흐름 의무)이나 질문으로 남긴다.
 - 모든 항목의 `id` 는 유일하다. `sourceRefs` 를 단다. 원본에 없어 채운 것은 `basis:"inferred"` 로 표시하고 `question` 에 `questions` 의 id 를 건다.
 - `states` 는 화면마다 로딩·빈·오류·권한·비활성·성공 등을 채운다. 해당 없으면 `n/a` 근거를 적는다.
 - `components` 는 현재 코드의 파일 구조를 따라 배치 트리(`parent`)를 만들고, 디자인 시스템 매칭(`ds.match`: exact|adapt|custom + 이유)을 적는다. 디자인 시스템 export 를 먼저 찾고, `ds.reason` 에는 확인한 부품 파일의 `path:line` 을 적고, 부품의 variant·size 같은 변형을 고르면 `variants` 앵커의 축과 값(예: `size: md`)을 그대로 인용한다. 앵커에 없는 값은 쓰지 않는다 — 필요하면 부품 수정(`ds-component-edit`)이다. 부품의 props·조합으로 되지 않아 **부품 자체를 고쳐야 하면** 그 수정은 `changeKind: ds-component-edit`(새 부품이면 `ds-component-new`) task 로 분리하고 제목에 `[DS 별도 태스크]` 를 붙인다 — 디자인 시스템 수정은 보통 피처 작업과 다른 티켓으로 처리된다. 피처 task 는 그 DS task 에 `dependsOn` 을 건다.

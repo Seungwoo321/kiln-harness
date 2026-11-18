@@ -250,7 +250,7 @@ export function validate(caseDir, planOverride) {
   // 그 확인 항목은 어디에도 남지 않는다 — 확인이 필요한 일은 questions 로 올린다. 비평 뒤의 계획서는 검사하지 않는다(지적 본문은
   // 비평 시점의 id 를 인용하고, 그 뒤 질문이 결정으로 내려가며 id 가 바뀐다). lineage 는 이전 사례의 id 라 제외한다.
   if (!(Array.isArray(plan.findings) && plan.findings.length)) {
-    const known = new Set([...ids.keys(), ...[...ids.keys()].filter((id) => id.startsWith('D-')).map((id) => id.slice(2))]);
+    const known = new Set([...ids.keys(), ...[...ids.keys()].filter((id) => id.startsWith('D-')).map((id) => id.slice(2)), ...(plan.conditions ?? []).map((c) => c.id)]);
     const prefixes = new Set([...ids.keys()].map((id) => id.match(/^([A-Z]+)-/)?.[1]).filter(Boolean).concat(['F', 'Q', 'D']));
     const idToken = new RegExp(`(?<![\\w-])(${[...prefixes].join('|')})-\\d+\\b`, 'g');
     const dangling = new Map();

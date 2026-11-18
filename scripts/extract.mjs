@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { canonical, sha256 } from './register.mjs';
+import { STATEMENT_KINDS, htmlStatements, markdownStatements, docxStatements } from './lib/conditions.mjs';
 
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const squash = (s) => s.replace(/\s+/g, ' ').trim();
@@ -225,7 +226,11 @@ export function extract(caseDir) {
   mkdirSync(outDir, { recursive: true });
   return registry.sources.map((source) => {
     const anchors = extractOne(source);
-    const doc = { schemaVersion: 1, kind: 'SourceAnchors', sourceId: source.id, inputDigest: source.sha256, anchors };
+    // 조건 후보 문장(조건 커버리지 계약) — 기획·배경 문서만
+    const statements = !STATEMENT_KINDS.includes(source.kind) ? null
+      : source.kind === 'plan-doc' ? docxStatements(anchors)
+        : source.kind === 'context-doc' ? markdownStatements(readFileSync(source.path, 'utf8')) : htmlStatements(readFileSync(source.path, 'utf8'));
+    const doc = { schemaVersion: 1, kind: 'SourceAnchors', sourceId: source.id, inputDigest: source.sha256, anchors, ...(statements ? { statements } : {}) };
     doc.digest = sha256(canonical(doc));
     writeFileSync(join(outDir, `${source.id}.json`), `${JSON.stringify(doc, null, 2)}\n`);
     return { id: source.id, anchors: anchors.length, digest: doc.digest };

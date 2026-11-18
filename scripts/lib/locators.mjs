@@ -3,6 +3,7 @@
 //
 // 인정하는 형식
 //   L<시작>-<끝> · L<줄>        행 범위 (원본 줄 수 안)
+//   P<시작>-<끝> · P<순번>      docx 문단 범위 (문단 순번 안)
 //   path:line                   코드 파일 (등록된 코드 앵커에 있는 경로)
 //   #id · [data-panel=…] · SCREENS['key'] · 주석 마커 문구 · 문서 절 경로 · operationId · 스키마 이름
 //                               → 앵커 값과 일치하거나, 원본 본문에 그 문자열이 실제로 있어야 한다
@@ -56,6 +57,12 @@ export function makeResolver(caseDir, registry, extractsById = null) {
         const total = text.split('\n').length;
         const [a, b] = [Number(range[1]), Number(range[2] ?? range[1])];
         return a >= 1 && b >= a && b <= total ? { ok: true, how: 'line' } : { ok: false, reason: `행 범위가 원본(${total}줄) 밖 — ${loc}` };
+      }
+      const para = loc.match(/^P(\d+)(?:-(\d+))?$/);
+      if (para && source.kind === 'plan-doc') {
+        const orders = anchors.map((x) => x.order).filter(Number.isInteger);
+        const [a, b] = [Number(para[1]), Number(para[2] ?? para[1])];
+        return a >= 1 && b >= a && b <= Math.max(0, ...orders) ? { ok: true, how: 'paragraph' } : { ok: false, reason: `문단 범위가 원본 밖 — ${loc}` };
       }
       const pathLine = loc.match(/^(.+):(\d+)$/);
       if (pathLine && source.kind === 'code') {
