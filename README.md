@@ -2,16 +2,30 @@
 
 # kiln-harness
 
-**기획·디자인 산출물 + 현재 코드·API 계약 → 바로 구현에 들어갈 수 있는 작업계획.** 같은 입력이면 같은 형식의 결과가 나온다.
-Turn scattered planning docs, design mockups, API specs and the current codebase into one consistent, implementation-ready work plan — run by Claude Code or Codex agents, checked by deterministic gates.
+**원본(기획·과제·회의 기록·설계 문서·시안·코드·API 계약)을 목적별 검증 산출물로 바꾸는 하네스.** 같은 입력이면 같은 형식의 결과가 나온다.
+Turn source material into purpose-specific, verified outputs — requirements, design reviews or implementation work plans — run by Claude Code or Codex agents and checked by deterministic gates.
 
-- 무엇이 이번 작업 범위이고 무엇이 기존 화면인가
-- 프로토타입이 담지 못한 상태(로딩·빈·오류·권한·비활성)는 무엇인가
-- 어떤 컴포넌트를 어느 파일에 두고, 디자인 시스템의 무엇과 맞추는가
-- 어떤 API 를 어느 화면·컴포넌트의 어떤 동작에 붙이는가
-- 기획·디자인·백엔드에 무엇을 확인해야 하는가 (`확인 요청` / `알림`)
+목적은 **목적 프로파일**이 정한다(`inputs.json` 의 `purpose`). 엔진(등록·추출·에이전트 단계 → 결정적 게이트 → 위반 주입 재시도·비평·결정·증분 판정)은 모든 프로파일이 같이 쓴다.
 
-결과는 사람이 읽는 `review.html` 과 `WORKPLAN.md` 이다. 기획·디자인 산출물은 만드는 사람마다 다르다 — 이 하네스는 그것을 **공통 형식으로 바꾸는 변환 자체**이며, 입력과 산출물(`cases/`)만 비공개로 둔다.
+| 프로파일 | 입력 | 산출 |
+|---|---|---|
+| `requirements` | 기획·과제(`plan`), 회의 기록·배경(`context`) | 요구사항과 검증 가능한 수용기준, 미결과 기본값, 범위 밖 목록, 변경 내역 |
+| `design-review` | 요구 원본(`plan`), 검토 대상 설계 문서(`subject`) | 요구 조건 → 설계 위치 커버리지, 불변식 반례 추적(응답 유실·동시 실행·재전송·지연 도착·부분 실패), 보완안 |
+| `fe-workplan` (기본) | 기획·디자인 시안·API 계약·현재 코드 | 바로 구현에 들어갈 화면 작업계획(범위·상태·컴포넌트·API 연결·작업·확인 질문) |
+
+프로파일은 `upstream` 으로 잇는다(`requirements` → `design-review` → `fe-workplan`): 뒤 사례가 앞 사례의 조건·결정·미결을 다시 만들지 않고 이어받는다.
+
+모든 프로파일이 거치는 엔진 공통 계약:
+- **조건 커버리지:**
+  - 원본의 조건 후보 문장을 스크립트가 빠짐없이 나열하고, 모든 문장이 조건(`C-xx`) 또는 비조건으로 분류돼야 한다.
+  - 모든 조건은 산출물의 항목으로 처리돼야 한다.
+  - 범위에서 제외해도 그 조건이 이 시스템에 남기는 의무는 요구사항·질문으로 남는다.
+- **결정 출처와 독립 재검토:**
+  - 사용자 결정은 새로 정함·권장안 채택·수정·기각과 그때 본 선택지, 사용자의 이유로 남는다.
+  - 권장안 채택은 선택적으로(`review.secondOpinion`) 그것을 만들지 않은 세션이 반례를 찾아 다시 본다.
+- **검증 정직성:** 하지 않은 검증은 통과가 아니라 미검사로 사유와 함께 남는다(예: 불변식이 없으면 "반례 추적 미검사").
+
+결과는 사람이 읽는 `review.html` 이다(fe-workplan 은 `WORKPLAN.md` 도 낸다). 원본과 산출물(`cases/`)만 비공개로 두고, 하네스 본체는 특정 제품·조직에 묶이지 않는다.
 
 ## 설치
 
@@ -28,8 +42,8 @@ codex plugin add kiln-harness@kiln-harness
 ```
 
 스킬은 두 개다.
-- **`start`** — 작업 주제나 참조 자료(기획·디자인 시안·API 스펙·코드 레포·확정 결정)를 받아 사례 폴더와 `inputs.json` 을 만들고, 터미널에서 돌릴 명령을 안내한다.
-- **`decide`** — 검토 화면의 항목 id 에 "이렇게 하겠다"를 기록한다.
+- **`start`** — 작업 주제나 참조 자료를 받아 목적 프로파일을 제안·확정하고, 사례 폴더와 `inputs.json` 을 만들고, 터미널에서 돌릴 명령을 안내한다.
+- **`decide`** — 검토 화면의 항목 id 에 결정과 그 출처(새로 정함·권장안 채택·수정·기각)를 기록한다.
 
 변환 파이프라인은 스킬 안에서 돌지 않고 **터미널의 `node scripts/run.mjs`** 가 단계마다 새 세션으로 `claude -p` 또는 `codex exec` 를 띄워 돌린다. Node 22 이상이 필요하다.
 
@@ -75,6 +89,8 @@ Claude의 rate limit 줄과 Codex의 입력 프롬프트는 숨긴다. Codex 로
 
 ## 사용
 
+아래 명령의 산출물 설명은 기본 프로파일 `fe-workplan` 기준이다. `scripts/validate.mjs`·`render.mjs`·`render-review.mjs`·`design-spec.mjs`·`verify.mjs`·`export-goal.mjs` 는 사례의 프로파일이 가진 구현을 실행한다(프로파일에 없는 명령은 거부한다).
+
 ```bash
 node scripts/run.mjs cases/<case>                  # 한 번에: 등록 → 추출 → 카탈로그 → 범위 → 해석 → 검증 → 비평 → 렌더
 node scripts/run.mjs cases/<case> --attempts 3 --loops 1   # 단계당 재시도 3회, 전체 재시작 1회(처음 돌릴 때 비용 상한)
@@ -105,28 +121,28 @@ node scripts/verify.mjs --root <사례 폴더> --url http://127.0.0.1:3000/ --co
 ## 동작 방식
 
 ```
-inputs.json → register → extract → design-spec → catalog → scope → interpret → (validate) → critic → render
-                                   (렌더 증거)                                                    ↓ 구현 후
-                              design-spec + 구현 URL·코드 → verify → conformance.json · conformance-brief.md
+inputs.json → register → extract(조건 후보 문장) → [프로파일 준비 단계] → catalog → [독립 재검토] → scope(조건 분류) → interpret → (게이트) → critic → render
+                (upstream: 앞 단계 조건·결정·미결)          (fe-workplan: 렌더 증거 S2d, 구현 후 verify S8)
 ```
 
-- 결정적 처리(등록·추출·카탈로그·형식 검증·렌더)는 스크립트가 맡는다. 의미 판단(범위·해석·비평·적합성)은 에이전트(역할 파일)가 맡는다. 무엇을 분류·해석·검증·렌더하는지는 목적 프로파일(`profiles/<id>/`, 현재 `fe-workplan`)이 정하고, 엔진은 프로파일 계약만 호출한다.
+- 결정적 처리(등록·추출·카탈로그·형식 검증·렌더)는 스크립트가 맡는다. 의미 판단(범위·해석·비평)은 에이전트(역할 파일)가 맡는다. 무엇을 분류·해석·검증·렌더하는지는 목적 프로파일(`profiles/<id>/`)이 정하고, 엔진(`scripts/`)은 프로파일 계약만 호출한다.
 - 단계마다 게이트가 결과를 검사하고, 위반은 다음 시도에 주입된다(단계당 최대 3회, 전체 최대 3회). 최종 실패하면 파생 산출물을 지우고 처음부터 다시 한다.
 - 같은 주제 안에서는 세션 id 로 대화를 이어간다(비평은 생산자와 분리하려고 새 세션).
-- 질문은 담당자에게 전달되는 두 종류(`confirm` · `notice`)만 남고, 원본이 이미 답한 것은 근거와 함께 `decisions` 로 기록된다.
+- 질문은 담당자만 정할 수 있는 미결정만 남고, 원본이 이미 답한 것은 근거와 함께 `decisions` 로 기록된다.
 - 후속 작업은 이전 사례를 링크해 바뀐 부분만 범위로 잡고 이전 결정을 이어받는다.
 
 ## 문서
 
-- [`docs/pipeline.md`](docs/pipeline.md) — 단계, 게이트, 실행 구조, 입력 구성
-- [`docs/workplan-format.md`](docs/workplan-format.md) — 산출물 형식과 판정 규칙
+- [`docs/pipeline.md`](docs/pipeline.md) — 엔진, 목적 프로파일, 조건 커버리지, 단계·게이트·실행 구조, 입력 구성
+- [`profiles/requirements/FORMAT.md`](profiles/requirements/FORMAT.md) · [`profiles/design-review/FORMAT.md`](profiles/design-review/FORMAT.md) — requirements·design-review 산출물 형식
+- [`docs/workplan-format.md`](docs/workplan-format.md) — fe-workplan 산출물 형식과 판정 규칙, 결정 기록
 - [`docs/goal-export.md`](docs/goal-export.md) — 승인된 분석을 실행 목표로 내보내는 JSON 형식
 - [`docs/design-conformance.md`](docs/design-conformance.md) — 렌더 증거·컴포넌트·토큰·적합성 판정
 
 ## 개발
 
 ```bash
-node --test 'scripts/*.test.mjs'          # 시험
+node --test 'scripts/*.test.mjs' 'profiles/*/*.test.mjs'   # 시험
 claude --plugin-dir .                       # Claude Code 에서 로컬 플러그인 로드
 codex plugin marketplace add .              # Codex 에서 로컬 마켓플레이스 추가
 ```
