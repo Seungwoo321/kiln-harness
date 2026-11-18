@@ -37,7 +37,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 | 원본 | 형식 |
 |---|---|
 | HTML·JS | `L<시작>-<끝>` 행 범위, 또는 `#id` · `[data-panel=…]` · `SCREENS['key']` · 주석 마커 문구 |
-| docx·Markdown | 절 경로 (`UI 정의 > 3.1 테스트 상태 별 메시지`) |
+| docx·Markdown | 절 경로 (`UI 정의 > 3.1 테스트 상태 별 메시지`). 조건 문장은 Markdown 행 범위 `L<시작>-<끝>`, docx 문단 범위 `P<시작>-<끝>` |
 | 코드 | `path:line` |
 | API 계약 | `operationId` 또는 스키마 이름 |
 
@@ -46,6 +46,16 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 - 원본끼리 어긋나면 우선순위는 **디자인 시안 > 기획 HTML > 기획 문서** 다. 단 정책·규칙(수신 조건, 마스킹, 저장 규칙)은 기획 문서가 정본이다. 어긋남은 `questions` 에 남긴다.
 - 확정된 구현 결정(context 원본)은 원본보다 앞선다.
 - `ds.match` 는 이 컴포넌트가 디자인 시스템 부품을 어떻게 쓰는지다. 디자인 시스템 자체를 고친다는 뜻이 아니다. 같은 역할의 부품이 있어 그대로 쓰면 `exact`(화면 표시 `DS 그대로 사용`), 속성·조합으로 맞추면 `adapt`(`DS 부품 조합`), 없으면 `custom`(`DS에 없음`)이다. `custom` 은 이유를 적는다. `ds.reason` 에는 확인한 부품 파일의 `path:line`(`design-system` 원본)을 적고, variant·size 를 고르면 인덱스의 `variants` 축과 값을 인용한다. 디자인 시스템 패키지의 파일을 바꾸는지는 `fileStatus` 와 `file` 경로·task 의 `changeKind`(`ds-component-new`·`ds-component-edit`)가 말한다. 그 task 는 제목에 `[DS 별도 태스크]` 를 달아 피처 작업과 분리한다.
+
+## 조건 커버리지
+
+| 필드 | 뜻 |
+|---|---|
+| `conditions` | 범위 단계가 분류한 원본 조건 `[{id:"C-01", text, sourceRefs}]`. 스크립트가 `scope.json` 에서 옮긴다 |
+| 항목의 `conditions` | 그 항목이 처리하는 조건 id 목록(요구사항·질문·결정 등 어느 항목이든) |
+| `excluded[].conditions` · `excluded[].residual` | 제외의 근거 조건과 남는 의무 — `obligations[{statement, handledBy:[항목 id]}]` 또는 `none`(없다는 근거) |
+
+모든 조건은 항목이나 제외에 한 번 이상 이어지고, 남는 의무마다 `handledBy` 가 실재해야 한다(`docs/pipeline.md` "조건 커버리지").
 
 ## v2 — 변경 유형 · 지적 · 사용자 결정
 

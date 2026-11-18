@@ -13,7 +13,7 @@ import { buildLineage } from './lineage.mjs';
 
 const ref = [{ sourceId: 'plan1', locator: 'L1-2' }];
 const html = (extra = '') => `<html><body>\n<h1 id="a">화면</h1>\n<p>본문 마스킹은 부분 마스킹</p>\n${extra}</body></html>\n`;
-const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [] });
+const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [], conditions: [], nonConditions: [{ sourceId: 'plan1', locator: 'L1-500', reason: '픽스처 — 조건 없음' }] });
 const draftOut = (extra = {}) => ({
   title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }], surfaces: scopeOut().surfaces, excluded: [],
   requirements: [{ id: 'R1', surface: 'S1', statement: '마스킹', acceptance: ['a'], basis: 'source', sourceRefs: ref }],

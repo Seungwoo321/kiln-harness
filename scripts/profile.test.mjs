@@ -24,7 +24,7 @@ test('계획서는 kind 로 프로파일을 찾는다 — kind 가 없으면 기
 test('엔진 코드는 프로파일의 단위·항목 섹션 이름을 직접 참조하지 않는다', () => {
   const p = profileById('fe-workplan');
   const names = [...p.sections, p.unit.ref];
-  const engine = ['run.mjs', 'lib/pipeline.mjs', 'lib/triage.mjs', 'decide.mjs', 'lineage.mjs', 'catalog.mjs', 'lib/levels.mjs', 'lib/profile.mjs'];
+  const engine = ['run.mjs', 'lib/pipeline.mjs', 'lib/triage.mjs', 'decide.mjs', 'lineage.mjs', 'catalog.mjs', 'lib/levels.mjs', 'lib/profile.mjs', 'lib/conditions.mjs'];
   for (const f of engine) {
     const code = readFileSync(new URL(f, import.meta.url), 'utf8').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
     for (const n of names) assert.ok(!new RegExp(`\\b${n}\\b`).test(code), `${f} 가 ${n} 를 직접 참조한다`);

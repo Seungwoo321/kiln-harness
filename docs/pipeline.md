@@ -36,10 +36,10 @@
 | 단계 | 주체 | 입력 → 출력 |
 |---|---|---|
 | S1 register | 스크립트 | 입력 경로 목록 → `sources.json` (id·kind·role·path·sha256·bytes) |
-| S2 extract | 스크립트 | 원본 → `extract/<sourceId>.json` (화면 앵커·주석 마커·라우트 키·문서 절·operation 목록·코드 인벤토리) |
+| S2 extract | 스크립트 | 원본 → `extract/<sourceId>.json` (화면 앵커·주석 마커·라우트 키·문서 절·operation 목록·코드 인벤토리). 기획·배경 문서는 조건 후보 문장 목록 `statements`(HTML·Markdown 은 줄 `L<n>`, docx 는 문단 `P<n>`)도 남긴다 |
 | S2c catalog | 스크립트 | `sources.json` → `references.json` (자료별 접근 방법·위치·줄 수, 역할별 부재 경고). 모든 단계 프롬프트에 들어간다 |
 | S2d design-spec | 스크립트 | 디자인 HTML → `design-spec/<sourceId>.json`·`component-baseline.json`·`existing-patterns.json`. 실행 순서는 extract → design-spec → catalog다 |
-| S3 scope | 에이전트 `profiles/fe-workplan/roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다 |
+| S3 scope | 에이전트 `profiles/fe-workplan/roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거, 조건 `conditions`·비조건 `nonConditions`, 제외의 남는 의무 `residual`). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다, 조건 원본의 모든 문장이 분류됐다 |
 | S4 interpret | 에이전트 `profiles/fe-workplan/roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
 | S5 validate | 스크립트 | 후보 계획서 → 위반 목록 (아래 게이트). 위반은 S4 의 다음 시도에 주입된다 |
 | S6 critic | 에이전트 `profiles/fe-workplan/roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재. 지적 id 는 스크립트가 계획서의 기존 id·이전 지적과 겹치지 않게 매긴다 |
@@ -63,6 +63,22 @@ S2d는 로컬 Chrome과 Node 내장 WebSocket을 사용한다. 파일은 상대 
 
 S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code`의 JSX에서 임의 크기 클래스 존재와 CSS 토큰 선언 여부를 수집한다. 기존 className 토큰 사용례를 후보로 제공한다. 수치 차이와 오차 안팎은 사실이다. 의미 대응과 acceptable·gap 등 판정은 별도 LLM 세션이 맡는다. `run.mjs --conformance`는 수집된 사실에 대한 판정만 재실행한다. gap·ds-override·token-missing·behavior-mismatch 판정은 종료 코드 1이다. needs-component는 경고다. 판단을 완료하지 못하면 3이다.
 
+
+## 조건 커버리지 (엔진 공통 계약)
+
+범위를 화면 같은 분류 단위로만 나누면, 대상이 빠진 조건이 이 시스템에 남기는 의무(데이터 전달·확장 수용)까지 사라진다. 그래서 모든 목적 프로파일은 다음을 거친다(`scripts/lib/conditions.mjs`).
+
+1. **문장 목록:** S2 가 프로파일의 `conditionRoles` 원본에서 조건 후보 문장을 결정적으로 나열한다. 에이전트에게 열거를 맡기지 않는다 — 처음부터 나열하지 않은 문장은 어떤 게이트도 잡지 못한다.
+2. **범위 게이트:**
+   - 모든 문장이 조건(`conditions[{id:"C-01", text, sourceRefs}]`) 또는 비조건(`nonConditions[{sourceId, locator 범위, reason}]`)으로 분류돼야 한다.
+   - 제외 항목은 근거 조건(`conditions`)과 `residual`(남는 의무 `obligations[{statement}]` 또는 없다는 근거 `none`)을 가진다.
+3. **해석·비평 게이트:**
+   - 모든 조건이 처리 항목(요구사항·질문·결정 등 항목의 `conditions`) 또는 제외 항목에 이어져야 한다.
+   - 남는 의무마다 `handledBy` 가 실재하는 항목을 가리켜야 한다.
+   - 비평이 질문을 결정으로 내리면 결정이 그 연결을 이어받는다.
+4. **검토 화면:** 조건 커버리지 표를 보인다.
+
+`conditions` 가 없는 이전 범위·계획서는 재사용·증분 대상이 아니며, 다음 실행에서 다시 만든다.
 
 ## 실행 구조
 

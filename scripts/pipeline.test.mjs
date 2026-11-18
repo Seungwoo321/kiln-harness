@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const ref = [{ sourceId: 'plan1', locator: 'L1-2' }];
-const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [] });
+const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [], conditions: [], nonConditions: [{ sourceId: 'plan1', locator: 'L1-500', reason: '픽스처 — 조건 없음' }] });
 const draftOut = () => ({
   title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }],
   surfaces: scopeOut().surfaces, excluded: [],

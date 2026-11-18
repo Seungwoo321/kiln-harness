@@ -17,13 +17,16 @@
 ```json
 {
   "surfaces": [{ "id": "S-XXX", "title": "", "entry": "진입 경로(라우트·모달 탭·버튼)", "change": "new|changed", "sourceRefs": [{ "sourceId": "", "locator": "" }] }],
-  "excluded": [{ "title": "", "reason": "", "sourceRefs": [{ "sourceId": "", "locator": "" }] }]
+  "excluded": [{ "title": "", "reason": "", "sourceRefs": [{ "sourceId": "", "locator": "" }], "conditions": ["C-01"], "residual": { "obligations": [{ "statement": "화면은 빠져도 이 시스템에 남는 의무" }], "none": "남는 의무가 없을 때의 근거" } }],
+  "conditions": [{ "id": "C-01", "text": "조건을 한 문장으로", "sourceRefs": [{ "sourceId": "", "locator": "L12-13" }] }],
+  "nonConditions": [{ "sourceId": "", "locator": "L1-11", "reason": "제목·UI 문구 등" }]
 }
 ```
 
 - `locator` 는 `L<시작>-<끝>` 행 범위, `#id`, `[data-panel=…]`, `SCREENS['key']`, 주석 마커 문구, 문서 절 경로, `path:line` 중 하나다.
 - 변경 표지(배지·날짜 주석·"Update")와 context 의 확정 범위를 근거로 삼는다.
 - plan·design 역할 원본은 하나도 빠짐없이 `surfaces` 또는 `excluded` 의 sourceRefs 에 한 번 이상 나타나야 한다.
+- 화면 분류와 조건 분류는 다른 축이다. 화면을 제외해도 그 조건이 이 시스템에 남기는 의무(데이터 전달·확장 수용 등)는 `excluded[].residual.obligations` 로 남긴다. 조건 문장 분류 규칙은 프롬프트의 [조건 커버리지] 를 따른다.
 </output_contract>
 
 <rules>
