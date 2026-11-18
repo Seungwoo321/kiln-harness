@@ -50,6 +50,7 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 
 `node scripts/run.mjs <case>` 를 터미널에서 직접 돌린다. 에이전트는 단계마다 새 세션(`claude -p` 또는 `codex exec`)이고, 러너·모델·effort 는 `kh.config.json`(사례 폴더의 같은 이름 파일과 환경변수 `KH_<STAGE>_RUNNER|MODEL|EFFORT` 가 덮는다)에서 단계별로 고른다. 이름은 코드에 고정하지 않는다.
 
+- **실행 사본:** `run.mjs` 는 시작할 때 `scripts/`·`roles/`·`docs/`·`kh.config.json`·`package.json` 을 내용 해시 이름의 사본(`~/.cache/kiln-harness/runtime/<digest>/`, `KH_RUNTIME_DIR` 로 바꾼다)으로 복사하고 그 사본에서 돈다. 실행 중에 플러그인이 업데이트돼 설치 폴더가 지워져도 그 실행은 시작한 버전의 역할·문서·설정으로 끝까지 간다. 사본은 만든 뒤 바꾸지 않는다.
 - **단계 루프:** 에이전트 실행 → 원본 무수정 확인 → 게이트 → 위반을 다음 시도 프롬프트에 주입. 단계당 최대 3회(`--attempts`).
 - **전체 루프:** 한 단계라도 소진되면 파생 산출물(`stages/`·`scope.json`·`workplan.json`·렌더물)을 지우고 S3 부터 다시. 최대 3회(`--loops`). 지난 시도의 위반은 교훈으로 넘어간다. 실패 시도는 `failed/loop-N/` 에 남는다.
 - **검토 수준:** `--level 0~10`(기본 5)이 해석·비평 프롬프트와 결정적 게이트의 엄격도를 정한다(README "검토 수준"). 수준이 바뀌면 범위만 이어받고 계획서는 새로 해석한다.
