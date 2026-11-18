@@ -58,5 +58,10 @@
   "review": {
     "secondOpinion": false,
     "bulkAcceptThreshold": 5
+  },
+  "profiles": {
+    "requirements": {
+      "openBudget": 10
+    }
   }
 }

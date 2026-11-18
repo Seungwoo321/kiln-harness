@@ -62,10 +62,20 @@ function describePrevious(caseDir, previous) {
   return { case: previous.case, caseId: reg.caseId, sourcesDigest: reg.digest, workplanDigest: sha256(canonical(JSON.parse(readFileSync(planPath, 'utf8')))), supersedes: previous.supersedes ?? {} };
 }
 
+// 앞 단계 목적 사례(예: requirements → design-review → fe-workplan). 통과한 계획서의 digest 를 고정한다 — 앞 단계가 바뀌면 이 사례도 다시 돈다.
+function describeUpstream(caseDir, upstream) {
+  if (!upstream?.case) fail('upstream 에는 case(앞 단계 사례 폴더 — 절대경로 또는 같은 cases/ 아래 이름)가 필요합니다');
+  const dir = previousDir(caseDir, upstream.case);
+  const planPath = join(dir, 'workplan.json'); const statusPath = join(dir, 'run-status.json');
+  if (!existsSync(planPath) || !existsSync(statusPath) || JSON.parse(readFileSync(statusPath, 'utf8')).result !== 'passed') fail(`upstream: 앞 단계 사례가 끝까지 통과하지 않았습니다 — ${dir}`);
+  const plan = JSON.parse(readFileSync(planPath, 'utf8'));
+  return { case: upstream.case, caseId: plan.caseId, kind: plan.kind, workplanDigest: sha256(canonical(plan)) };
+}
+
 export function register(caseDir) {
   const inputsPath = join(caseDir, 'inputs.json');
   if (!existsSync(inputsPath)) fail(`inputs.json 이 없습니다 — ${inputsPath}`);
-  const { caseId, inputs, previous, brief } = JSON.parse(readFileSync(inputsPath, 'utf8'));
+  const { caseId, inputs, previous, upstream, brief } = JSON.parse(readFileSync(inputsPath, 'utf8'));
   if (!caseId || !Array.isArray(inputs) || inputs.length === 0) fail('inputs.json 에 caseId 와 inputs[] 가 필요합니다');
 
   const ids = new Set();
@@ -87,6 +97,7 @@ export function register(caseDir) {
   const doc = { schemaVersion: 1, kind: 'SourceRegistry', caseId, sources };
   if (brief) doc.brief = String(brief);
   if (previous) doc.lineage = describePrevious(caseDir, previous);
+  if (upstream) doc.upstream = describeUpstream(caseDir, upstream);
   doc.digest = sha256(canonical(doc));
   writeFileSync(join(caseDir, 'sources.json'), `${JSON.stringify(doc, null, 2)}\n`);
   return doc;

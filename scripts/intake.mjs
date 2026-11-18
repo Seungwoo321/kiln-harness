@@ -9,6 +9,7 @@
 //   "brief": "이번 작업이 무엇인지 1~3줄",            // 선택 — 모든 단계 프롬프트의 '작업 주제'
 //   "purpose": "fe-workplan",                       // 선택 — 목적 프로파일(없으면 fe-workplan)
 //   "previous": { "case": "이전-사례", "supersedes": {"새id": "이전id"} },   // 선택 — 후속 작업
+//   "upstream": { "case": "앞-단계-사례" },          // 선택 — 앞 단계 목적 사례(requirements → design-review → fe-workplan)의 조건·결정·미결을 이어받는다
 //   "items": [
 //     { "path": "/abs/기획.html", "role": "plan", "mode": "copy|reference", "id": "선택", "note": "선택", "kind": "선택(자동 판별 덮어쓰기)" },
 //     { "path": "/abs/코드레포", "role": "implementation", "ref": "origin/main", "paths": ["src"], "note": "백엔드" }   // git 레포 → code(커밋 고정)
@@ -97,7 +98,7 @@ export function classify(spec) {
     used.add(id);
     return { id, role: item.role, note: item.note ?? null, source: item.path, ...out };
   }).filter(Boolean);
-  if (!items.some((x) => x.role === 'plan')) errors.push('plan(기획) 역할의 자료가 없다 — 요구사항의 출처가 없으면 시작할 수 없다');
+  if (!spec?.upstream && !items.some((x) => x.role === 'plan')) errors.push('plan(기획) 역할의 자료가 없다 — 요구사항의 출처가 없으면 시작할 수 없다');
   const expected = spec?.purpose && purposes().includes(spec.purpose) ? profileById(spec.purpose).expectedRoles : profileById(DEFAULT_PURPOSE).expectedRoles;
   for (const r of expected) if (!items.some((x) => x.role === r)) warnings.push(`${r} 역할의 자료가 없다 — 카탈로그가 그 부재를 에이전트에게 알린다`);
   return { items, errors, warnings };
@@ -121,7 +122,7 @@ export function materialize(spec, root, { force = false } = {}) {
     }
     return { id: it.id, kind: it.kind, role: it.role, path, ...(it.note ? { note: it.note } : {}) };
   });
-  writeFileSync(join(dir, 'inputs.json'), `${JSON.stringify({ caseId: spec.case, ...(spec.brief ? { brief: spec.brief } : {}), ...(spec.purpose ? { purpose: spec.purpose } : {}), ...(spec.previous ? { previous: spec.previous } : {}), inputs }, null, 2)}\n`);
+  writeFileSync(join(dir, 'inputs.json'), `${JSON.stringify({ caseId: spec.case, ...(spec.brief ? { brief: spec.brief } : {}), ...(spec.purpose ? { purpose: spec.purpose } : {}), ...(spec.previous ? { previous: spec.previous } : {}), ...(spec.upstream ? { upstream: spec.upstream } : {}), inputs }, null, 2)}\n`);
   return dir;
 }
 

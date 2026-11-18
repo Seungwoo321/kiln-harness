@@ -29,6 +29,8 @@
   - 프롬프트: `prompt`·`levelBlock`
   - 명령: `cli`·`commands`
 - `scripts/validate.mjs`·`render.mjs`·`render-review.mjs`·`design-spec.mjs`·`verify.mjs`·`export-goal.mjs` 는 사례의 프로파일이 가진 같은 이름의 구현을 실행하는 CLI 다.
+- `requirements`(`profiles/requirements/`)는 기획·과제(`plan`)와 회의 기록·배경(`context`)의 모든 문장을 조건으로 분류하고, 요구사항과 검증 가능한 수용기준(`when`→`then`), 미결과 기본값(예산 `profiles.requirements.openBudget`), 범위 밖 목록, 변경 내역을 낸다. 형식: `profiles/requirements/FORMAT.md`.
+- **프로파일 연결:** `inputs.json` 의 `upstream: {case}` 로 앞 단계 사례(예: requirements → design-review → fe-workplan)를 잇는다. 등록 단계가 앞 단계 계획서의 digest 를 고정하고, 엔진은 앞 단계의 조건(C-xx)을 범위에 상속시키며(`inherited`), 결정과 미결은 프롬프트에 확정값·기존 미결로 넘긴다. 이 사례 원본의 새 조건만 겹치지 않는 번호로 열거한다. 앞 단계가 바뀌면 원본 digest 가 달라져 다시 돈다.
 - `design-review`(`profiles/design-review/`)는 요구 원본(`plan`)과 검토 대상 설계 문서(`subject`)를 입력으로 받는다.
   - 조건마다 설계 위치의 커버리지(`covered`·`mention-only`·`missing`·`excluded`)를 판정한다.
   - 지정 불변식마다 반례 시나리오(응답 유실·동시 실행·재전송·지연 도착·부분 실패)를 문서 단계를 따라 추적한다.

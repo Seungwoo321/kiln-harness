@@ -5,10 +5,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import feWorkplan from '../../profiles/fe-workplan/profile.mjs';
 import designReview from '../../profiles/design-review/profile.mjs';
+import requirementsProfile from '../../profiles/requirements/profile.mjs';
 
 export const DEFAULT_PURPOSE = 'fe-workplan';
 // 등록표는 호출 시점에 만든다 — 프로파일 모듈이 엔진 모듈을 다시 가져오는 순환에서 평가 순서에 기대지 않는다.
-const registry = () => [feWorkplan, designReview];
+const registry = () => [feWorkplan, designReview, requirementsProfile];
 export const purposes = () => registry().map((p) => p.id);
 
 export function profileById(id) {
