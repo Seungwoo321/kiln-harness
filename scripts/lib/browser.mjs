@@ -64,7 +64,9 @@ export async function serveGit(repo, commit) {
 const delay = (ms) => new Promise((yes) => setTimeout(yes, ms));
 export async function launchBrowser(chrome, scratch = tmpdir(), cleanup = () => {}) {
   const profile = mkdtempSync(join(scratch, 'chrome-'));
-  const child = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--disable-dev-shm-usage', '--lang=en-US', '--force-device-scale-factor=1', '--no-proxy-server', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-extensions', '--disable-dev-shm-usage', '--lang=en-US', '--force-device-scale-factor=1', '--no-proxy-server', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'], detached: process.platform !== 'win32' });
+  // 주 프로세스만 죽이면 렌더러·GPU 보조 프로세스가 남는다. 별도 프로세스 그룹으로 띄워 그룹 전체를 종료한다.
+  const kill = (signal) => { try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, signal); } catch { /* 이미 종료됨 */ } };
   let stderr = ''; let spawnError;
   child.stderr.on('data', (b) => { stderr = (stderr + b).slice(-4000); });
   child.on('error', (e) => { spawnError = e; });
@@ -77,13 +79,14 @@ export async function launchBrowser(chrome, scratch = tmpdir(), cleanup = () => 
     ws?.close(); rejectAll(new Error('Chrome 종료'));
     if (child.exitCode === null && child.signalCode === null && !spawnError) {
       const stopped = new Promise(yes => child.once('exit', yes));
-      child.kill('SIGTERM');
+      kill('SIGTERM');
       await Promise.race([stopped, delay(2000)]);
-      if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await stopped; }
+      if (child.exitCode === null && child.signalCode === null) { kill('SIGKILL'); await stopped; }
     }
+    if (!spawnError && child.pid) kill('SIGKILL');
     rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   })();
-  const exited = () => { child.kill('SIGKILL'); rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); cleanup(); };
+  const exited = () => { kill('SIGKILL'); rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); cleanup(); };
   const stop = async (code) => { try { await close(); } finally { cleanup(); process.exit(code); } };
   const terminated = () => { void stop(143); }; const interrupted = () => { void stop(130); };
   process.once('SIGTERM', terminated); process.once('SIGINT', interrupted); process.once('exit', exited);
