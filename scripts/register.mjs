@@ -7,7 +7,7 @@ import { join, resolve, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const KINDS = new Set(['plan-html', 'plan-doc', 'design-html', 'design-asset', 'api-contract', 'code', 'context-doc']);
-const ROLES = new Set(['plan', 'design', 'contract', 'implementation', 'design-system', 'context']);
+const ROLES = new Set(['plan', 'design', 'contract', 'implementation', 'design-system', 'context', 'subject']);
 // 계약 파일은 contract 역할로 따로 등록해야 S2 가 operation 앵커를 만들고 S5 가 apiBindings 를 검사한다.
 const CONTRACT_FILE = /(^|\/)(openapi|swagger)[^/]*\.(ya?ml|json)$/i;
 

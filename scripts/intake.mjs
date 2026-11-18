@@ -18,14 +18,14 @@ import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, copyFileS
 import { join, resolve, basename, extname, dirname } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_PURPOSE, purposes } from './lib/profile.mjs';
+import { DEFAULT_PURPOSE, purposes, profileById } from './lib/profile.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROLES = ['plan', 'design', 'contract', 'implementation', 'design-system', 'context'];
+const ROLES = ['plan', 'design', 'contract', 'implementation', 'design-system', 'context', 'subject'];
 const COPY_LIMIT = 25 * 1024 * 1024;
 const SUPPORTED = {
   plan: '.html .htm .docx .md .txt', design: '.html .htm .js .jsx .ts .tsx .css .svg', contract: '.yaml .yml .json (또는 git 레포)',
-  implementation: 'git 레포(디렉터리)', 'design-system': 'git 레포(디자인 시스템 패키지 디렉터리)', context: '.md .txt .docx .html .htm',
+  implementation: 'git 레포(디렉터리)', 'design-system': 'git 레포(디자인 시스템 패키지 디렉터리)', context: '.md .txt .docx .html .htm', subject: '.md .txt .docx .html .htm',
 };
 
 // 역할 × 확장자 → register 의 kind. 이미지·PDF 처럼 읽을 수 없는 형식은 거부하고 변환을 안내한다.
@@ -37,7 +37,7 @@ export function detectKind(role, file) {
   if (role === 'plan') { if (html) return 'plan-html'; if (ext === '.docx') return 'plan-doc'; if (text) return 'context-doc'; }
   if (role === 'design') { if (html) return 'design-html'; if (asset) return 'design-asset'; }
   if (role === 'contract') { if (['.yaml', '.yml', '.json'].includes(ext)) return 'api-contract'; }
-  if (role === 'context') { if (text) return 'context-doc'; if (ext === '.docx') return 'plan-doc'; if (html) return 'plan-html'; }
+  if (role === 'context' || role === 'subject') { if (text) return 'context-doc'; if (ext === '.docx') return 'plan-doc'; if (html) return 'plan-html'; }
   return null;
 }
 
@@ -98,7 +98,8 @@ export function classify(spec) {
     return { id, role: item.role, note: item.note ?? null, source: item.path, ...out };
   }).filter(Boolean);
   if (!items.some((x) => x.role === 'plan')) errors.push('plan(기획) 역할의 자료가 없다 — 요구사항의 출처가 없으면 시작할 수 없다');
-  for (const r of ['design', 'contract', 'implementation', 'design-system']) if (!items.some((x) => x.role === r)) warnings.push(`${r} 역할의 자료가 없다 — 카탈로그가 그 부재를 에이전트에게 알린다`);
+  const expected = spec?.purpose && purposes().includes(spec.purpose) ? profileById(spec.purpose).expectedRoles : profileById(DEFAULT_PURPOSE).expectedRoles;
+  for (const r of expected) if (!items.some((x) => x.role === r)) warnings.push(`${r} 역할의 자료가 없다 — 카탈로그가 그 부재를 에이전트에게 알린다`);
   return { items, errors, warnings };
 }
 

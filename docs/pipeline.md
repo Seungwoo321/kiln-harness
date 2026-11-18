@@ -29,6 +29,12 @@
   - 프롬프트: `prompt`·`levelBlock`
   - 명령: `cli`·`commands`
 - `scripts/validate.mjs`·`render.mjs`·`render-review.mjs`·`design-spec.mjs`·`verify.mjs`·`export-goal.mjs` 는 사례의 프로파일이 가진 같은 이름의 구현을 실행하는 CLI 다.
+- `design-review`(`profiles/design-review/`)는 요구 원본(`plan`)과 검토 대상 설계 문서(`subject`)를 입력으로 받는다.
+  - 조건마다 설계 위치의 커버리지(`covered`·`mention-only`·`missing`·`excluded`)를 판정한다.
+  - 지정 불변식마다 반례 시나리오(응답 유실·동시 실행·재전송·지연 도착·부분 실패)를 문서 단계를 따라 추적한다.
+  - 결함마다 보완안을 낸다.
+  - 불변식이 지정되지 않으면 반례 추적은 미검사로 보인다. 문서 집합 내부 정합성 검사는 범위가 아니다.
+  - 형식은 `profiles/design-review/FORMAT.md` 가 정한다.
 - `fe-workplan` 은 화면(`surfaces`)을 분류 단위로, 화면 구현 작업계획(`workplan.json`·`WORKPLAN.md`·`review.html`)을 산출물로 한다. 아래 단계표의 S2d·S5·S8 과 화면 관련 게이트는 이 프로파일의 것이다.
 
 ## 단계

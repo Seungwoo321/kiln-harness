@@ -11,7 +11,7 @@ import { canonical, sha256 } from './register.mjs';
 import { loadProfile } from './lib/profile.mjs';
 
 const ROLE_HINT = {
-  plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', 'design-system': '디자인 시스템(공통 UI 부품) 코드', context: '확정 결정·배경 문서',
+  plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', 'design-system': '디자인 시스템(공통 UI 부품) 코드', context: '확정 결정·배경 문서', subject: '검토 대상 설계 문서',
 };
 
 const insideCase = (caseDir, p) => { const r = relative(caseDir, p); return !!r && !r.startsWith('..') && !isAbsolute(r); };
@@ -33,7 +33,7 @@ export function buildCatalog(caseDir, profile = loadProfile(caseDir)) {
   });
 
   const byRole = Object.fromEntries(Object.keys(ROLE_HINT).map((r) => [r, sources.filter((x) => x.role === r).map((x) => x.id)]));
-  const missingRoles = Object.keys(ROLE_HINT).filter((r) => byRole[r].length === 0);
+  const missingRoles = Object.keys(profile.roleWarnings).filter((r) => !byRole[r]?.length); // 무엇이 없으면 알릴지는 목적 프로파일이 정한다
   const catalog = { schemaVersion: 1, kind: 'ReferenceCatalog', caseId: registry.caseId, ...(registry.brief ? { brief: registry.brief } : {}), sources, byRole, missingRoles, warnings: missingRoles.map((r) => `${r}: ${profile.roleWarnings[r]}`) };
   Object.assign(catalog, profile.catalogExtras(caseDir, registry)); // 프로파일이 프롬프트에 싣는 사전 수집 요약(예: 렌더 증거)
   catalog.digest = sha256(canonical(catalog));
