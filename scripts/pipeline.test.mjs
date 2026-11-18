@@ -146,7 +146,7 @@ test('결정만 바뀌면 범위는 이어받고 기존 계획서 위에서 해�
 
 test('사용자 결정이 이어받은 이전 지적 id 와 새 비평의 id 가 겹쳐도, 결정은 그대로 두고 새 지적에 겹치지 않는 id 를 매긴다(재시도 포함)', () => {
   const { dir } = fixture(); assert.equal(go(dir, fakeAgent()).ok, true);
-  decide(dir, 'F-001', 'decided', '원본대로 한다');
+  decide(dir, 'F-001', 'decided', '원본대로 한다', { origin: 'user' });
   const before = readFileSync(join(dir, 'decisions.json'), 'utf8');
   const kept = { id: 'F-001', kind: 'answered-by-source', statement: '원본대로 한다', rationale: '사용자 결정', sourceRefs: ref };
   const agent = fakeAgent({

@@ -9,8 +9,10 @@ import { join, resolve } from 'node:path';
 import { validate } from './validate.mjs';
 import { dsMatchLabel } from './lib/labels.mjs';
 import { canonical, sha256 } from '../../scripts/register.mjs';
-import { readDecisions, staleDecisions } from '../../scripts/decide.mjs';
+import { readDecisions, staleDecisions, bulkAccepted } from '../../scripts/decide.mjs';
 import { conformanceSection } from './lib/conformance-view.mjs';
+import { readOpinions, opinionOf } from '../../scripts/lib/second-opinion.mjs';
+import { loadConfig } from '../../scripts/lib/pipeline.mjs';
 import { conditionCoverage } from '../../scripts/lib/conditions.mjs';
 import { decidableSections, profileForPlan } from '../../scripts/lib/profile.mjs';
 
@@ -25,6 +27,8 @@ const KIND_LABEL = {
 const STANCE_LABEL = {
   'follow-existing': '기존 패턴 따름', 're-review': '다시 검토', 'ask-plan': '기획 확인', 'ask-design': '디자인 확인', 'ask-backend': '백엔드 확인', decided: '결정함',
 };
+const ORIGIN_LABEL = { user: '사용자가 정함', 'recommendation-accepted': '권장안 채택', 'recommendation-modified': '권장안 수정', 'recommendation-rejected': '권장안 기각' };
+const VERDICT_LABEL = { agree: '동의', disagree: '반대', 'needs-info': '정보 부족' };
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 
 export function renderReview(caseDir) {
@@ -35,10 +39,17 @@ export function renderReview(caseDir) {
   const stale = new Set(staleDecisions(caseDir, p).map((d) => d.id));
   const v2 = p.schemaVersion >= 2;
 
+  const opinions = readOpinions(caseDir);
   const decisionBadge = (id) => {
     const d = decisions.get(id);
-    return d ? `<div class="decision${stale.has(id) ? ' stale' : ''}"><b>${esc(STANCE_LABEL[d.stance])}</b>${stale.has(id) ? ' · 항목이 바뀜, 재확인' : ''}<br>${text(d.note)}</div>` : '';
+    if (!d) return '';
+    const o = opinionOf(d, opinions);
+    const no = o?.verdict === 'disagree';
+    const provenance = d.origin ? `<br><span class="ev">${esc(ORIGIN_LABEL[d.origin] ?? d.origin)} · ${d.reason ? `이유: ${text(d.reason)}` : '이유 없음'}</span>` : '';
+    const review = o ? `<br><span class="ev">독립 재검토 ${esc(VERDICT_LABEL[o.verdict] ?? o.verdict)}${no ? ' — 반영하지 않음' : ''}${(o.counterexamples ?? []).length ? `: ${o.counterexamples.map((c) => text(c.statement)).join(' / ')}` : ''}</span>` : '';
+    return `<div class="decision${stale.has(id) || no ? ' stale' : ''}"><b>${esc(STANCE_LABEL[d.stance])}</b>${stale.has(id) ? ' · 항목이 바뀜, 재확인' : ''}<br>${text(d.note)}${provenance}${review}</div>`;
   };
+  const bulk = bulkAccepted([...decisions.values()], loadConfig(caseDir).review.bulkAcceptThreshold ?? 5);
   const idCell = (id) => `<td class="idc"><code class="id" id="${esc(id)}">${esc(id)}</code>${decisionBadge(id)}</td>`;
   const residualBlock = (r) => (!r ? '' : `<div class="ev">${(r.obligations ?? []).length ? `남는 의무: ${r.obligations.map((o) => `${text(o.statement)}${(o.handledBy ?? []).length ? ` → ${o.handledBy.map((id) => `<a href="#${esc(id)}">${esc(id)}</a>`).join(', ')}` : ''}`).join('; ')}` : `남는 의무 없음: ${text(r.none)}`}</div>`);
   const refs = (rs = []) => rs.map((r) => `<code>${esc(r.sourceId)}</code> ${esc(r.locator)}`).join('<br>');
@@ -166,7 +177,7 @@ main{padding:8px 24px 64px}section{margin-top:28px}h2{font-size:16px;margin:0 0 
 .hint,.none,.ev{color:var(--muted);font-size:12px}.ev{margin-top:3px}ul{margin:4px 0;padding-left:18px}.tree{list-style:none;padding-left:0}.tree ul{list-style:none;padding-left:20px;border-left:1px dashed var(--line)}.tree li{margin:6px 0}
 </style></head><body>
 <header><h1>${esc(p.title ?? p.caseId)}</h1><p>${esc(p.summary ?? '')}</p><p>digest <code>${digest}</code> · 원본 ${p.inputDigests.length}건${codeBase ? ` · 코드 기준 ${codeBase}` : ''} · 읽기 전용 — 결정은 터미널에서 <code>node scripts/decide.mjs &lt;case&gt; &lt;id&gt; &lt;stance&gt; "&lt;결정&gt;"</code></p></header>
-<div class="cards">${cards}</div><nav>${nav}</nav><main>${parts.join('')}</main></body></html>
+<div class="cards">${cards}</div>${bulk.map((run) => `<p class="hint" style="padding:0 24px">이유 없이 권장안을 연속 ${run.length}건 채택했다 (${run.map(esc).join(', ')}) — 독립 재검토(review.secondOpinion)를 권한다.</p>`).join('')}<nav>${nav}</nav><main>${parts.join('')}</main></body></html>
 `;
   writeFileSync(join(caseDir, 'review.html'), html);
   return html;

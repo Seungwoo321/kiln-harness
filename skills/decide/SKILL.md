@@ -24,11 +24,22 @@ description: 검토 화면(review.html)의 항목 id 에 대한 사용자 결정
    | 이렇게 확정한다 | `decided` |
 
    결정 내용(`note`)은 사용자가 정한 방식 그대로 한두 문장으로 적는다. 사용자가 말하지 않은 근거를 지어내지 않는다.
+
+   **출처(`--origin`)** 도 옮긴다. 질문(`assumption`)·지적(`recommendation`)처럼 권장안이 있는 항목은 출처가 필수다.
+
+   | 말 | origin |
+   |---|---|
+   | 권장안대로 한다 · 권장안으로 확정 | `recommendation-accepted` |
+   | 권장안을 고쳐서 한다 | `recommendation-modified` |
+   | 권장안 말고 다른 선택지 / 다르게 한다 | `recommendation-rejected` (`--chosen option-<n>` — 보여 준 선택지를 골랐을 때) |
+   | 권장안과 무관하게 새로 정한다 | `user` |
+
+   사용자가 이유를 말했으면 그 말 그대로 `--reason` 에 넣는다. 말하지 않았으면 넣지 않는다 — 이유를 지어내거나 요약해 채우지 않는다. 권장안을 연달아 그대로 채택하려 하면, 이유를 남기거나 독립 재검토(`kh.config.json` 의 `review.secondOpinion: true`)를 켤 수 있다고 한 번 알린다.
 3. **기록한다.**
    ```bash
-   node "$KH/scripts/decide.mjs" <사례 폴더> <id> <stance> "<결정 내용>"
-   node "$KH/scripts/decide.mjs" <사례 폴더> --list      # 확인 ([stale] = 항목이 바뀌어 재확인 필요)
+   node "$KH/scripts/decide.mjs" <사례 폴더> <id> <stance> "<결정 내용>" --origin <출처> [--chosen <선택지 id>] [--reason "<사용자 원문>"]
+   node "$KH/scripts/decide.mjs" <사례 폴더> --list      # 확인 (출처·이유·재검토 결과, [stale] = 항목이 바뀌어 재확인 필요, 연속 일괄 채택 경고)
    node "$KH/scripts/decide.mjs" <사례 폴더> --remove <id>
    ```
    없는 id 나 모르는 stance 는 스크립트가 거부한다 — 메시지를 그대로 전하고 다시 묻는다.
-4. **반영 방법을 안내한다.** 결정은 터미널에서 `node "$KH/scripts/run.mjs" <사례 폴더>` 를 다시 돌려야 계획서에 반영된다. 결정만 바뀐 재실행은 범위와 세션을 이어받아 해당 항목만 다시 해석한다. 이 세션에서 직접 실행하지 않는다.
+4. **반영 방법을 안내한다.** 결정은 터미널에서 `node "$KH/scripts/run.mjs" <사례 폴더>` 를 다시 돌려야 계획서에 반영된다. 결정만 바뀐 재실행은 범위와 세션을 이어받아 해당 항목만 다시 해석한다. 독립 재검토가 켜져 있으면 그 실행이 권장안 채택마다 새 세션으로 반례를 찾고, 반대(disagree)한 결정은 반영하지 않고 검토 화면에 반례와 함께 되돌린다. 이 세션에서 직접 실행하지 않는다.
