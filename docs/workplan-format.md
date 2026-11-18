@@ -1,7 +1,7 @@
 # 작업계획(WorkPlan) 형식
 
 개발자가 기획 HTML·문서·실제 앱을 오가지 않고 이것 하나로 구현을 시작할 수 있게 하는 산출물이다.
-JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과다. 검사 규칙의 정본은 `scripts/validate.mjs` 다.
+JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과다. 검사 규칙의 정본은 `profiles/fe-workplan/validate.mjs` 다. 이 형식은 `fe-workplan` 목적 프로파일의 출력이다.
 
 ## envelope
 

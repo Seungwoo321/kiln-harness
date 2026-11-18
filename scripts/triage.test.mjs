@@ -201,7 +201,7 @@ test('증분 게이트·지적 이월: 영향 밖 항목 보존, 비평 범위, 
   assert.deepEqual(preservedViolations(before, after, ['R1']), ['영향 목록 밖 항목이 바뀜 — R2 (바꿔야 하면 impactIds 에 있어야 한다)']);
   assert.deepEqual(preservedViolations(before, { ...after, requirements: [after.requirements[0]] }, ['R1']), ['영향 목록 밖 항목이 사라짐 — R2']);
   const scope = criticScope(before, after, ['R1']);
-  assert.deepEqual([...scope.ids].sort(), ['R1', 'R3']); assert.deepEqual([...scope.surfaces], ['S1']);
+  assert.deepEqual([...scope.ids].sort(), ['R1', 'R3']); assert.deepEqual([...scope.units], ['S1']);
   const prev = [{ id: 'F-001', target: 'R1' }, { id: 'F-002', target: 'R2', carriedFrom: '001-x' }, { id: 'F-003', target: 'GONE' }];
   const m = mergeFindings(prev, [{ target: 'R3', message: 'n' }], scope, new Set(['R1', 'R2', 'R3']), '002-y');
   assert.deepEqual(m.findings.map((f) => [f.id, f.target, f.carriedFrom]), [['F-002', 'R2', '001-x'], ['F-004', 'R3', undefined]]);

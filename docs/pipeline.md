@@ -13,6 +13,24 @@
 | 생산자 ≠ 검증자 | LLM 단계의 산출물은 결정적 게이트(S5)가 검증한다. 생산 단계가 스스로 통과시키지 않는다 |
 | 원본은 옮기지 않는다 | 입력은 경로·sha256·크기로 등록한다. 사례 폴더는 레포에 올리지 않는다 |
 
+## 목적 프로파일
+
+엔진(`scripts/`)은 등록·추출·카탈로그, 단계 루프(에이전트 → 원본 무수정 확인 → 게이트 → 위반 주입), 전체 루프, 질문 판정과 결정 전환, 지적 번호·이월, 증분 판정(triage)·history, 결정 기록, 계보, 실행 사본을 맡는다. 무엇을 분류하고 무엇을 만들고 어떻게 검사·렌더하는지는 목적 프로파일(`profiles/<id>/profile.mjs`)이 정한다.
+
+- 사례는 `inputs.json` 의 `purpose` 로 프로파일을 고른다(없으면 `fe-workplan`). 계획서는 envelope 의 `kind` 로 프로파일을 찾는다.
+- 프로파일 계약:
+  - 정체: `id`·`kind`·`schemaVersion`
+  - 분류 단위: `unit`(섹션·참조 필드·이름)
+  - 항목: `sections`(엔진 공통 `questions`·`decisions`·`findings` 외의 항목 섹션), `inferable`(추론 항목을 둘 수 있는 섹션)
+  - 역할: `role(name)`
+  - 게이트: `gates.scope`·`gates.interpret`·`gates.critic`, `protectedQuestions`, `prune`, `criticFields`
+  - 검증·렌더: `validate`·`render`, `derived`(파생 산출물)
+  - 준비 단계: `prepare`(예: S2d), `upToDate`, `statusExtras`, `catalogExtras`, `roleWarnings`
+  - 프롬프트: `prompt`·`levelBlock`
+  - 명령: `cli`·`commands`
+- `scripts/validate.mjs`·`render.mjs`·`render-review.mjs`·`design-spec.mjs`·`verify.mjs`·`export-goal.mjs` 는 사례의 프로파일이 가진 같은 이름의 구현을 실행하는 CLI 다.
+- `fe-workplan` 은 화면(`surfaces`)을 분류 단위로, 화면 구현 작업계획(`workplan.json`·`WORKPLAN.md`·`review.html`)을 산출물로 한다. 아래 단계표의 S2d·S5·S8 과 화면 관련 게이트는 이 프로파일의 것이다.
+
 ## 단계
 
 | 단계 | 주체 | 입력 → 출력 |
@@ -21,13 +39,13 @@
 | S2 extract | 스크립트 | 원본 → `extract/<sourceId>.json` (화면 앵커·주석 마커·라우트 키·문서 절·operation 목록·코드 인벤토리) |
 | S2c catalog | 스크립트 | `sources.json` → `references.json` (자료별 접근 방법·위치·줄 수, 역할별 부재 경고). 모든 단계 프롬프트에 들어간다 |
 | S2d design-spec | 스크립트 | 디자인 HTML → `design-spec/<sourceId>.json`·`component-baseline.json`·`existing-patterns.json`. 실행 순서는 extract → design-spec → catalog다 |
-| S3 scope | 에이전트 `roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다 |
-| S4 interpret | 에이전트 `roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
+| S3 scope | 에이전트 `profiles/fe-workplan/roles/scope.md` | 앵커 → `scope.json` (이번 작업 화면 / 제외 화면과 근거). 게이트: 모든 plan·design 입력이 범위 판단에 쓰였다 |
+| S4 interpret | 에이전트 `profiles/fe-workplan/roles/interpret.md` | 범위·원본·계약·코드·결정 → 작업계획 초안. 스크립트가 envelope 를 채워 `workplan.json` 으로 조립한다 |
 | S5 validate | 스크립트 | 후보 계획서 → 위반 목록 (아래 게이트). 위반은 S4 의 다음 시도에 주입된다 |
-| S6 critic | 에이전트 `roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재. 지적 id 는 스크립트가 계획서의 기존 id·이전 지적과 겹치지 않게 매긴다 |
+| S6 critic | 에이전트 `profiles/fe-workplan/roles/critic.md` (S4 와 다른 세션·모델) | 계획서·원본 → `findings` (심각도·근거·권고). 게이트: 근거 필수, 대상 id 실재. 지적 id 는 스크립트가 계획서의 기존 id·이전 지적과 겹치지 않게 매긴다 |
 | S0 triage | 스크립트 + 에이전트 `roles/triage.md` | 입력이 바뀐 재실행에서 이전 스냅샷과 현재 입력 → `delta.json`·`triage.json` (skip·incremental·rewrite, 영향 id). 가드레일이 먼저 rewrite 를 강제한다 (실행 구조 참조) |
 | S7 render | 스크립트 | `WORKPLAN.md` · `WORKPLAN.html`(전체 문서) · `review.html`(변경 유형·지적·결정 화면) |
-| S8 verify | 스크립트 + 에이전트 `roles/conformance.md` | 구현 URL·코드 → `conformance-facts.json` → LLM 판정 → `conformance.json`·`conformance-brief.md`·review.html의 시안 적합성 절 |
+| S8 verify | 스크립트 + 에이전트 `profiles/fe-workplan/roles/conformance.md` | 구현 URL·코드 → `conformance-facts.json` → LLM 판정 → `conformance.json`·`conformance-brief.md`·review.html의 시안 적합성 절 |
 
 ## 출처별 수용 정책
 
@@ -50,7 +68,7 @@ S8은 계획서 생성 후 독립적으로 실행한다. 스크립트는 `--code
 
 `node scripts/run.mjs <case>` 를 터미널에서 직접 돌린다. 에이전트는 단계마다 새 세션(`claude -p` 또는 `codex exec`)이고, 러너·모델·effort 는 `kh.config.json`(사례 폴더의 같은 이름 파일과 환경변수 `KH_<STAGE>_RUNNER|MODEL|EFFORT` 가 덮는다)에서 단계별로 고른다. 이름은 코드에 고정하지 않는다.
 
-- **실행 사본:** `run.mjs` 는 시작할 때 `scripts/`·`roles/`·`docs/`·`kh.config.json`·`package.json` 을 내용 해시 이름의 사본(`~/.cache/kiln-harness/runtime/<digest>/`, `KH_RUNTIME_DIR` 로 바꾼다)으로 복사하고 그 사본에서 돈다. 실행 중에 플러그인이 업데이트돼 설치 폴더가 지워져도 그 실행은 시작한 버전의 역할·문서·설정으로 끝까지 간다. 사본은 만든 뒤 바꾸지 않는다.
+- **실행 사본:** `run.mjs` 는 시작할 때 `scripts/`·`roles/`·`profiles/`·`docs/`·`kh.config.json`·`package.json` 을 내용 해시 이름의 사본(`~/.cache/kiln-harness/runtime/<digest>/`, `KH_RUNTIME_DIR` 로 바꾼다)으로 복사하고 그 사본에서 돈다. 실행 중에 플러그인이 업데이트돼 설치 폴더가 지워져도 그 실행은 시작한 버전의 역할·문서·설정으로 끝까지 간다. 사본은 만든 뒤 바꾸지 않는다.
 - **단계 루프:** 에이전트 실행 → 원본 무수정 확인 → 게이트 → 위반을 다음 시도 프롬프트에 주입. 단계당 최대 3회(`--attempts`).
 - **전체 루프:** 한 단계라도 소진되면 파생 산출물(`stages/`·`scope.json`·`workplan.json`·렌더물)을 지우고 S3 부터 다시. 최대 3회(`--loops`). 지난 시도의 위반은 교훈으로 넘어간다. 실패 시도는 `failed/loop-N/` 에 남는다.
 - **검토 수준:** `--level 0~10`(기본 5)이 해석·비평 프롬프트와 결정적 게이트의 엄격도를 정한다(README "검토 수준"). 수준이 바뀌면 범위만 이어받고 계획서는 새로 해석한다.

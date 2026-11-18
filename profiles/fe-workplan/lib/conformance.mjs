@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { canonical, sha256 } from '../register.mjs';
+import { canonical, sha256 } from '../../../scripts/register.mjs';
 
 export const BLOCKING = new Set(['gap', 'ds-override', 'token-missing', 'behavior-mismatch']);
 export const PRINCIPLE = '컴포넌트 규칙을 시안의 px보다 우선한다. 1. 올바른 size/variant/prop을 쓴다. 2. 기존 컴포넌트를 조합한다. 3. 반복 UI이면 새 컴포넌트 후보와 근거를 판단한다. 4. 임의 px className 덮어쓰기는 새 갭이다. 측정값은 증거이며 size의 근거는 클래스다.';

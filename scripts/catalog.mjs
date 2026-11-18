@@ -8,23 +8,15 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { canonical, sha256 } from './register.mjs';
-import { readDesignSpecs } from './lib/design-policy.mjs';
+import { loadProfile } from './lib/profile.mjs';
 
 const ROLE_HINT = {
   plan: '기획 산출물', design: '디자인 시안', contract: 'API 계약(스펙)', implementation: '현재 구현 코드', 'design-system': '디자인 시스템(공통 UI 부품) 코드', context: '확정 결정·배경 문서',
 };
-const COVERAGE_WARN = {
-  plan: '기획 원본이 없다 — 요구사항의 출처가 없으므로 작업을 시작할 수 없다',
-  design: '디자인 시안이 없다 — 화면 구성·상태는 기획과 현재 코드에서만 근거를 찾는다. 시안에서 온 것처럼 쓰지 않는다',
-  contract: 'API 계약이 등록돼 있지 않다 — API·필드에 대한 사실은 단정하지 않는다. "계약에 없다"는 주장은 근거가 될 수 없다',
-  implementation: '구현 코드가 등록돼 있지 않다 — 기존 파일·컴포넌트·패턴을 근거로 삼을 수 없다',
-  'design-system': '디자인 시스템 코드가 등록돼 있지 않다 — ds.match 는 부품의 실제 props·동작을 확인하지 않은 추정이 된다. 시안 유무와 무관하게 등록한다',
-  context: '확정 결정·배경 문서가 없다',
-};
 
 const insideCase = (caseDir, p) => { const r = relative(caseDir, p); return !!r && !r.startsWith('..') && !isAbsolute(r); };
 
-export function buildCatalog(caseDir) {
+export function buildCatalog(caseDir, profile = loadProfile(caseDir)) {
   const registry = JSON.parse(readFileSync(join(caseDir, 'sources.json'), 'utf8'));
   const anchorCount = (id) => { const f = join(caseDir, 'extract', `${id}.json`); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')).anchors.length : null; };
 
@@ -42,12 +34,8 @@ export function buildCatalog(caseDir) {
 
   const byRole = Object.fromEntries(Object.keys(ROLE_HINT).map((r) => [r, sources.filter((x) => x.role === r).map((x) => x.id)]));
   const missingRoles = Object.keys(ROLE_HINT).filter((r) => byRole[r].length === 0);
-  const catalog = { schemaVersion: 1, kind: 'ReferenceCatalog', caseId: registry.caseId, ...(registry.brief ? { brief: registry.brief } : {}), sources, byRole, missingRoles, warnings: missingRoles.map((r) => `${r}: ${COVERAGE_WARN[r]}`) };
-  const statusFile = join(caseDir, 'design-spec-status.json');
-  // 요약은 프롬프트에 그대로 실린다. 요소별 컴포넌트 후보는 시안 하나에 수 MB 라 개수만 두고, 상세는 design-spec/<sourceId>.json 에서 읽는다.
-  if (existsSync(statusFile)) catalog.designSpec = { ...JSON.parse(readFileSync(statusFile, 'utf8')), summary: readDesignSpecs(caseDir, registry).map(s => ({ sourceId: s.sourceId, theme: s.render.theme, interactions: s.interactions.map(i => ({ id: i.id, kind: i.kind, items: i.items.map(x => x.label), openPolicy: i.openPolicy, initial: i.initial, reclick: i.reclick })), candidateElements: s.elements.filter(e => e.componentCandidates?.length).length })) };
-  const patternFile = join(caseDir, 'existing-patterns.json');
-  if (existsSync(patternFile)) catalog.existingPatterns = JSON.parse(readFileSync(patternFile, 'utf8')).candidates.length;
+  const catalog = { schemaVersion: 1, kind: 'ReferenceCatalog', caseId: registry.caseId, ...(registry.brief ? { brief: registry.brief } : {}), sources, byRole, missingRoles, warnings: missingRoles.map((r) => `${r}: ${profile.roleWarnings[r]}`) };
+  Object.assign(catalog, profile.catalogExtras(caseDir, registry)); // 프로파일이 프롬프트에 싣는 사전 수집 요약(예: 렌더 증거)
   catalog.digest = sha256(canonical(catalog));
   writeFileSync(join(caseDir, 'references.json'), `${JSON.stringify(catalog, null, 2)}\n`);
   return catalog;

@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validate } from './validate.mjs';
+import { validate } from '../profiles/fe-workplan/validate.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';
 import { applyQuestionVerdicts } from './lib/pipeline.mjs';
-import { levelBlock, parseLevel, tierOf } from './lib/levels.mjs';
+import { parseLevel, tierOf } from './lib/levels.mjs';
+import { levelBlock } from '../profiles/fe-workplan/levels.mjs';
 
 const PLAN = '<html><body>\n<h1 id="a">내보내기 설정</h1>\n<p>형식 4종: CSV PDF XLSX JSON</p>\n<p>JSON 옵션: 들여쓰기, 인코딩</p>\n</body></html>\n';
 const CONTRACT = '# 계약\n\n## ExportFormat\n\nCSV, PDF, XLSX, JSON.\n\n## option_schema\n\n서버가 내려준다.\n';

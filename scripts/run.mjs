@@ -14,14 +14,15 @@ import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { parseLevel } from './lib/levels.mjs';
 import { relaunchFromSnapshot } from './lib/runtime.mjs';
-import { runPipeline, runConformance } from './lib/pipeline.mjs';
+import { runPipeline } from './lib/pipeline.mjs';
+import { loadProfile } from './lib/profile.mjs';
 
 function parseArgs(argv) {
   const args = { open: false, force: false, dir: null, stageAttempts: 0, loopAttempts: 0 };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--open') args.open = true;
-    else if (a === '--conformance') args.conformance = true;
+    else if (a === '--conformance') args.command = 'conformance'; // 프로파일 명령(profile.commands)
     else if (a === '--force') args.force = true;
     else if (a === '--rewrite') args.rewrite = true;
     else if (a === '--attempts') args.stageAttempts = Number(argv[(i += 1)]);
@@ -44,6 +45,8 @@ const args = parseArgs(process.argv.slice(2));
 // 실행 중 플러그인 업데이트가 설치 폴더를 지워도 이 실행이 끝까지 돌도록 내용 주소 스냅샷에서 다시 실행한다.
 const relaunched = await relaunchFromSnapshot(import.meta.url, process.argv.slice(2));
 if (relaunched !== null) process.exit(relaunched);
-const result = args.conformance ? runConformance(args.dir, args) : runPipeline(args.dir, args);
+const command = args.command && loadProfile(args.dir).commands?.[args.command];
+if (args.command && !command) { process.stderr.write(`이 사례의 목적 프로파일에는 --${args.command} 명령이 없다\n`); process.exit(2); }
+const result = command ? command(args.dir, args) : runPipeline(args.dir, args);
 if (result.ok && args.open) execFileSync('open', [join(args.dir, 'review.html')]);
 process.exit(result.ok ? 0 : result.needsInput ? 3 : 1); // 3 = 입력 보강 필요

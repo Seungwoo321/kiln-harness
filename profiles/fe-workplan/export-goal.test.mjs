@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { exportGoal } from './export-goal.mjs';
-import { canonical, sha256 } from './register.mjs';
+import { canonical, sha256 } from '../../scripts/register.mjs';
 
 const plan = () => ({
   caseId: 'fx', title: '목록 개선', summary: '목록에 필터를 더한다', inputDigests: ['d1'],

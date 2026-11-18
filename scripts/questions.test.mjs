@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPipeline } from './lib/pipeline.mjs';
-import { validate } from './validate.mjs';
+import { validate } from '../profiles/fe-workplan/validate.mjs';
 import { register } from './register.mjs';
 import { extract } from './extract.mjs';
 
