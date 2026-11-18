@@ -54,9 +54,11 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 | 절 | 필드 |
 |---|---|
 | `tasks[].changeKind` | `new-page`·`new-menu`·`ds-component-new`·`ds-component-edit`·`feature-change`(기존 피처의 배치·컴포넌트 수정)·`feature-copy`(문구)·`i18n`·`api-wiring` — 모든 task 가 하나를 가진다 |
-| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` `carriedFrom?` — 입력 산출물이나 계획서의 불완전한 부분. `id` 는 스크립트가 계획서의 다른 id 와 겹치지 않게 매긴다. `carriedFrom` 은 증분 실행에서 이월된 지적이 처음 나온 실행(`history/<runId>`)이다 |
+| `findings` | `id` `severity`(high·medium·low) `origin`(plan·design·code·contract·workplan) `target`(계획서의 id) `message` `evidence?` `recommendation` `stance` `ask?` `carriedFrom?` — 입력 산출물이나 계획서의 불완전한 부분. `id` 는 스크립트가 계획서의 다른 id 와 겹치지 않게 매긴다. `carriedFrom` 은 증분 실행에서 이월된 지적이 처음 나온 실행(`history/<runId>`)이다 |
 
-`stance` 는 권고다: `follow-existing`(기존 패턴을 따른다) · `re-review`(다시 검토한다) · `ask-plan`·`ask-design`·`ask-backend`(담당자에게 확인한다).
+`stance` 는 권고다: `follow-existing`(기존 패턴을 따른다) · `re-review`(다시 검토한다) · `ask-plan`·`ask-design`·`ask-backend`(담당자에게 확인한다). 앞의 둘은 코드·계약 안에서 해결할 구현 누락이고 작업에 반영한다. `ask-*` 는 담당자만 정할 수 있는 미결정이다.
+
+`ask-*` 지적은 `ask` 를 가진다(비평 게이트가 검사한다): `undecided`(무엇이 미결정인가) · `whyExternal`(코드·계약·원본으로 정할 수 없는 이유) · `affects`(답에 따라 달라지는 계획서 항목 id, 1개 이상, 실재) · `trace`(`path:line` 목록 — `ask-backend` 는 입력·저장·소비·콜백 경계를 따라간 위치가 1개 이상 필요하다).
 
 changeKind 와 covers 의 정합(결정적 검사)
 - `new-page`·`new-menu` → `change:new` 인 화면을 covers 에 포함

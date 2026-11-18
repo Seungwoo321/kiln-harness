@@ -46,13 +46,17 @@ export function renderReview(caseDir) {
   const section = (key, title, body, hint = '') => `<section id="sec-${key}"><h2>${esc(title)}</h2>${hint ? `<p class="hint">${hint}</p>` : ''}${body}</section>`;
   const surfaceTitle = (id) => esc(p.surfaces.find((s) => s.id === id)?.title ?? id);
 
+  const askBlock = (a) => (a ? `<div class="ev">미결정: ${text(a.undecided)}<br>외부 결정 이유: ${text(a.whyExternal)}<br>영향: ${(a.affects ?? []).map((i) => `<a href="#${esc(i)}">${esc(i)}</a>`).join(', ')}${(a.trace ?? []).length ? `<br>경계 추적: ${a.trace.map((t) => `<code>${esc(t)}</code>`).join(' → ')}` : ''}</div>` : '');
+  // 결론이 어느 코드 시점에 대한 것인지 보인다 — 등록 때 고정한 커밋이다.
+  const sources = existsSync(join(caseDir, 'sources.json')) ? JSON.parse(readFileSync(join(caseDir, 'sources.json'), 'utf8')).sources ?? [] : [];
+  const codeBase = sources.filter((x) => x.kind === 'code').map((x) => `<code>${esc(x.id)}</code> ${esc(x.ref)} @ <code>${esc(String(x.commit).slice(0, 12))}</code>`).join(' · ');
   const findings = [...(p.findings ?? [])].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || a.id.localeCompare(b.id));
   const kindCount = Object.entries(p.tasks.reduce((m, t) => ({ ...m, [t.changeKind ?? '-']: (m[t.changeKind ?? '-'] ?? 0) + 1 }), {})).sort();
   const open = [...(p.questions ?? []), ...findings].filter((x) => !decisions.has(x.id)).length;
 
   const cards = [
     ['화면', p.surfaces.length], ['요구사항', p.requirements.length], ['작업', p.tasks.length],
-    ['지적', findings.length], ['확인 질문', (p.questions ?? []).length], ['결정 대기', open], ['결정함', decisions.size],
+    ['지적', findings.length], ['외부 확인 지적', findings.filter((f) => String(f.stance).startsWith('ask-')).length], ['확인 질문', (p.questions ?? []).length], ['결정 대기', open], ['결정함', decisions.size],
   ].map(([k, v]) => `<div class="card"><b>${v}</b><span>${k}</span></div>`).join('');
 
   const taskRows = [...p.tasks].sort((a, b) => (a.changeKind ?? '').localeCompare(b.changeKind ?? '') || a.id.localeCompare(b.id)).map((t) => row(t.id, [
@@ -67,7 +71,8 @@ export function renderReview(caseDir) {
     parts.push(section('findings', '지적 — 산출물의 불완전한 부분', table(['id', '심각도', '위치', '지적', '권고'],
       findings.map((f) => row(f.id, [`<span class="tag sev-${esc(f.severity)}">${esc(f.severity)}</span>`, `<code>${esc(f.target)}</code> · ${esc(f.origin)}`,
         text(f.message) + (f.evidence ? `<div class="ev">${text(f.evidence)}</div>` : ''),
-        `<span class="tag">${esc(STANCE_LABEL[f.stance])}</span><br>${text(f.recommendation)}`]))), '권고는 제안이다. 결정은 터미널에서 이 id 로 남긴다.'));
+        `<span class="tag${String(f.stance).startsWith('ask-') ? ' warn' : ''}">${esc(STANCE_LABEL[f.stance])}</span><br>${text(f.recommendation)}${askBlock(f.ask)}`]))),
+      '권고는 제안이다. 기존 패턴 따름·다시 검토는 작업에 반영할 구현 누락이고, 기획·디자인·백엔드 확인만 담당자에게 넘길 미결정이다. 결정은 터미널에서 이 id 로 남긴다.'));
   }
   const linPath = join(caseDir, 'lineage.json');
   if (p.lineage && existsSync(linPath)) {
@@ -149,7 +154,7 @@ main{padding:8px 24px 64px}section{margin-top:28px}h2{font-size:16px;margin:0 0 
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}.chip{padding:3px 10px;border-radius:999px;background:var(--soft);border:1px solid var(--line)}
 .hint,.none,.ev{color:var(--muted);font-size:12px}.ev{margin-top:3px}ul{margin:4px 0;padding-left:18px}.tree{list-style:none;padding-left:0}.tree ul{list-style:none;padding-left:20px;border-left:1px dashed var(--line)}.tree li{margin:6px 0}
 </style></head><body>
-<header><h1>${esc(p.title ?? p.caseId)}</h1><p>${esc(p.summary ?? '')}</p><p>digest <code>${digest}</code> · 원본 ${p.inputDigests.length}건 · 읽기 전용 — 결정은 터미널에서 <code>node scripts/decide.mjs &lt;case&gt; &lt;id&gt; &lt;stance&gt; "&lt;결정&gt;"</code></p></header>
+<header><h1>${esc(p.title ?? p.caseId)}</h1><p>${esc(p.summary ?? '')}</p><p>digest <code>${digest}</code> · 원본 ${p.inputDigests.length}건${codeBase ? ` · 코드 기준 ${codeBase}` : ''} · 읽기 전용 — 결정은 터미널에서 <code>node scripts/decide.mjs &lt;case&gt; &lt;id&gt; &lt;stance&gt; "&lt;결정&gt;"</code></p></header>
 <div class="cards">${cards}</div><nav>${nav}</nav><main>${parts.join('')}</main></body></html>
 `;
   writeFileSync(join(caseDir, 'review.html'), html);

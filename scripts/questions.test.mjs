@@ -153,3 +153,33 @@ test('검토 화면: 질문은 종류·담당자·근거 위치로, 결정은 �
   const html2 = readFileSync(join(dir2, 'review.html'), 'utf8');
   assert.ok(html2.includes('원본이 이미 답한 것') && html2.includes('id="D-Q1"') && html2.includes('원본이 명시함'));
 });
+
+// ── 지적 분류: 구현 누락 vs 외부 결정 ─────────────────────────────────────────
+const keepAll = [{ id: 'Q1', verdict: 'keep' }];
+const finding = (over = {}) => ({ severity: 'medium', origin: 'workplan', target: 'T1', message: '상위 항목을 고친 뒤 그 값을 쓰는 하위 목록 캐시를 무효화하지 않는다', evidence: 'src/a.tsx:10', recommendation: '하위 목록 조회 키도 무효화한다', stance: 'follow-existing', ...over });
+const ask = { undecided: '읽기 전용 전환 뒤 기존 저장값을 덮어쓸지', whyExternal: '기존 고객 설정의 호환 정책은 기획이 정한다', affects: ['R1'] };
+
+test('비평: 외부 확인(ask-*) 지적은 미결정·외부 결정 이유·영향 항목이 있어야 한다', () => {
+  const none = go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-plan' })], questionVerdicts: keepAll })));
+  assert.equal(none.ok, false); assert.ok(none.violations.some((v) => v.includes('ask{undecided')));
+  const ghost = go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-plan', ask: { ...ask, affects: ['NOPE'] } })], questionVerdicts: keepAll })));
+  assert.ok(ghost.violations.some((v) => v.includes('계획서에 없는 id') && v.includes('NOPE')));
+  assert.equal(go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-plan', ask })], questionVerdicts: keepAll }))).ok, true);
+});
+test('비평: 백엔드 확인은 경계를 따라간 path:line 이 있어야 한다', () => {
+  const bare = go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-backend', ask })], questionVerdicts: keepAll })));
+  assert.equal(bare.ok, false); assert.ok(bare.violations.some((v) => v.includes('ask-backend 는 ask.trace')));
+  const loose = go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-backend', ask: { ...ask, trace: ['redirectUri 필드 검색'] } })], questionVerdicts: keepAll })));
+  assert.ok(loose.violations.some((v) => v.includes('path:line')));
+  assert.equal(go(fixture(), agent(() => ({ findings: [finding({ stance: 'ask-backend', ask: { ...ask, trace: ['api/oauth/save.ts:41', 'api/oauth/token.ts:88'] } })], questionVerdicts: keepAll }))).ok, true);
+});
+test('검토 화면: 구현 누락은 작업 반영으로, 외부 확인은 근거와 함께 따로 보인다', () => {
+  const dir = fixture();
+  const r = go(dir, agent(() => ({ findings: [finding(), finding({ stance: 'ask-backend', target: 'R1', ask: { ...ask, trace: ['api/oauth/save.ts:41'] } })], questionVerdicts: keepAll })));
+  assert.equal(r.ok, true);
+  const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
+  assert.deepEqual(plan.findings.map((f) => f.stance), ['follow-existing', 'ask-backend']);
+  const html = readFileSync(join(dir, 'review.html'), 'utf8');
+  assert.ok(html.includes('<b>1</b><span>외부 확인 지적</span>'));
+  assert.ok(html.includes('미결정: 읽기 전용 전환 뒤') && html.includes('<code>api/oauth/save.ts:41</code>'));
+});

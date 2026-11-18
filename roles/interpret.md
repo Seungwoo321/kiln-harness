@@ -52,7 +52,9 @@
 - **원본이 이미 답한 것은 질문이 아니다 — `decisions` 에 근거와 함께 기록한다.** `decisions` 항목: `{ "id": "D-01", "kind": "answered-by-source|sources-agree|single-source", "statement": "무엇으로 정했나", "rationale": "왜(원본이 어떻게 말하나)", "sourceRefs": [{ "sourceId": "", "locator": "" }] }`.
   `answered-by-source` 원본이 명시함 · `sources-agree` 기획 HTML 과 디자인(등 서로 다른 두 원본)이 같음(원본 2개 이상의 위치) · `single-source` 한쪽에만 있어 그쪽을 따름. locator 는 실재하는 것만 쓴다(스크립트가 원본에서 찾아 확인한다).
 - **`questions` 는 담당자에게 전달되는 두 종류만이다.** 질문마다 `kind`, `sourceRefs`(질문을 낳은 원본 위치), `to`(plan|design|backend), `assumption`, `options`, `impact` 를 쓴다.
-  - `kind:"confirm"` — **원본끼리 실제로 다르거나, 한쪽이 잘못됐거나, 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있을 때.** `claimType`: `mismatch`(서로 다른 **두 원본**의 위치를 `sourceRefs` 에 모두 단다) · `wrong`(`evidence`: 무엇이 왜 잘못인지) · `pattern`(`evidence`: 어떤 패턴과 어떻게 다른지, `assumption`: 제안).
+  - **의도된 변경은 질문이 아니다.** 기획·디자인이 현재 코드와 다른 동작을 분명히 정했고 기존 계약(API·저장·라우팅) 안에서 구현할 수 있으면, 그 변경은 요구사항으로 채택하고 `decisions`(`answered-by-source`)에 근거를 남긴다. 현재 UI와 다르다는 것만으로 `confirm`·`pattern` 을 만들지 않는다. 변경을 위해 계약이 바뀌어야 하는지는 값이 들어오고·저장되고·쓰이고·돌아오는 경로를 코드에서 따라가 확인한다.
+  - **구현 책임은 질문이 아니다.** 코드·계약으로 정할 수 있는 일(캐시 무효화, 라우트 추가, 기존 저장값 호환 처리 등)은 `tasks` 로 계획한다. 담당자에게 넘기는 것은 그들만 정할 수 있는 미결정뿐이다 — 질문에는 무엇이 미결정인지와 답에 따라 달라지는 항목(`impact`)을 적는다.
+  - `kind:"confirm"` — **원본끼리 실제로 다르거나, 한쪽이 잘못됐거나, 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있을 때.** `pattern` 은 원본이 그 차이를 의도했다고 볼 근거가 없을 때만이다. `claimType`: `mismatch`(서로 다른 **두 원본**의 위치를 `sourceRefs` 에 모두 단다) · `wrong`(`evidence`: 무엇이 왜 잘못인지) · `pattern`(`evidence`: 어떤 패턴과 어떻게 다른지, `assumption`: 제안).
   - `kind:"notice"` — **원본 어디에도 정의가 없어 추론·개발 결정한 것의 알림**("이렇게 정했다" = `assumption`). `searched: [{ "sourceId": "", "scope": "찾아본 범위" }]` 를 남기고 **계약(contract)·확정 결정(context) 원본을 반드시 포함**한다 — 질문을 올리기 전에 계약의 해당 절을 실제로 찾아 읽는다. 계약이 이미 정의하면 notice 가 아니라 `decisions` 다.
   - `basis:"inferred"` 항목은 반드시 `kind:"notice"` 질문(`question`)을 가리킨다.
 - 추론을 확정값처럼 쓰지 않는다. 기획·디자인·백엔드에 물어야 할 것은 `questions` 로 모은다(`to`, `options`, `assumption`, `impact`).
