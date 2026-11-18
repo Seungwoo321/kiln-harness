@@ -9,7 +9,7 @@
       "name": "kiln-harness",
       "source": "./",
       "description": "원본 → 목적별 검증 산출물(요구 정의·설계 검증·화면 작업계획) 하네스 (입력 정의 스킬 + 터미널 파이프라인)",
-      "version": "0.2.15",
+      "version": "0.3.0",
       "homepage": "https://github.com/Seungwoo321/kiln-harness"
     }
   ]
