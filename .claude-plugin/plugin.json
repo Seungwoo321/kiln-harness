@@ -1,6 +1,6 @@
 {
   "name": "kiln-harness",
-  "version": "0.2.15",
+  "version": "0.3.0",
   "description": "원본(기획·과제·회의 기록·설계 문서·시안·코드·API 계약)을 목적별 검증 산출물(요구 정의·설계 검증·화면 구현 작업계획)로 바꾸는 하네스. 입력 정의(start)와 결정 기록(decide) 스킬 + 터미널 파이프라인.",
   "author": {
     "name": "Seungwoo321"
