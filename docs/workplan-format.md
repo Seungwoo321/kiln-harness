@@ -26,7 +26,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 | `states` | `id` `surface` `region` `state` `condition` `display` `behavior?` `basis` `question?` `sourceRefs` — 화면마다 1개 이상 |
 | `components` | `id` `surface` `parent?` `name` `file` `fileStatus`(`existing`·`new`) `ds{component, match(exact·adapt·custom), reason}` `sourceRefs` |
 | `apiBindings` | `id` `operationId` `surface` `component` `trigger`(`load`·`submit`·`toggle`·`action`·`refresh`) `request` `response` `errors` `sourceRefs` |
-| `i18n` | `key` `status`(`new`·`existing`) `text?` |
+| `i18n` | `id?`(지적·결정·증분 추적에 사용할 고유 ID) `key` `status`(`new`·`existing`) `text?` |
 | `gaps` | `id` `surface` `current` `target` `file?` |
 | `tasks` | `id` `title` `files[]` `dependsOn[]` `ticket?` `covers[]` — 모든 component·apiBinding 이 어느 task 에 들어간다. covers 는 비울 수 없다 |
 | `newFiles` | `file` `reason` — component 가 아닌 새 파일(훅·mock·테스트 등). tasks·gaps 의 파일은 현재 코드에 있거나 new 로 선언돼 있어야 한다 |

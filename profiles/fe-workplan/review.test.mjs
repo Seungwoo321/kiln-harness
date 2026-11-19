@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { itemIds } from '../../scripts/lib/triage.mjs';
 import { validate } from './validate.mjs';
 import { decide, remove, staleDecisions } from '../../scripts/decide.mjs';
 import { renderReview } from './render-review.mjs';
@@ -103,4 +104,24 @@ test('한 시안의 적합성 결과는 전체 시안 목록의 부분집합이�
     writeFileSync(join(dir, 'conformance.json'), JSON.stringify({ inputDigests: [digest], rows: [], status: 'passed' }));
     assert.equal(renderReview(dir).includes('id="sec-conformance"'), expected);
   }
+});
+
+
+test('선택적 i18n ID는 지적·결정·증분 추적에서 인식하고 ID 없는 기존 문구도 허용한다', () => {
+  const dir = fixture((p) => {
+    p.i18n = [{ id: 'TXT-044', key: 'empty', status: 'existing', text: 'Unavailable' }, { key: 'legacy', status: 'existing' }];
+    p.findings[0].target = 'TXT-044';
+  });
+  try {
+    assert.deepEqual(validate(dir), []);
+    const plan = JSON.parse(readFileSync(join(dir, 'workplan.json'), 'utf8'));
+    assert.ok(itemIds(plan).has('TXT-044'));
+    assert.equal(itemIds(plan).has(undefined), false);
+    decide(dir, 'TXT-044', 're-review', '문구 검토');
+    assert.equal(staleDecisions(dir, plan).length, 0);
+    plan.i18n[0].text = 'Changed';
+    assert.equal(staleDecisions(dir, plan).length, 1);
+    assert.ok(validate(dir, { ...plan, i18n: [plan.i18n[1]] }).some((e) => e.includes('target')));
+    assert.ok(validate(dir, { ...plan, i18n: [...plan.i18n, { ...plan.i18n[0] }] }).some((e) => e.includes('id 중복')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

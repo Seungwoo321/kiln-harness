@@ -127,7 +127,7 @@ export function validate(caseDir, planOverride) {
     for (const f of ['request', 'response', 'errors']) if (b[f] === undefined) err(w, `${f} 가 없음`);
   });
 
-  list('i18n').forEach((k, i) => { const w = `i18n[${i}]`; if (!k.key) err(w, 'key 가 없음'); oneOf(w, 'status', k.status, 'i18nStatus'); });
+  list('i18n').forEach((k, i) => { const w = `i18n[${i}]`; if (k.id !== undefined) claim(k.id, w); if (!k.key) err(w, 'key 가 없음'); oneOf(w, 'status', k.status, 'i18nStatus'); });
   // 신규 파일의 정본은 newFiles 하나다 — 현재 코드에 없는 파일은 모두 여기에 이유와 함께 있어야 하고, fileStatus:new 컴포넌트도 예외가 아니다.
   const newFiles = Array.isArray(plan.newFiles) ? plan.newFiles : [];
   const declaredNew = new Set(newFiles.map((f) => f.file));
