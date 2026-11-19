@@ -61,7 +61,7 @@ export default {
   kind: 'WorkPlan',
   schemaVersion: 3,
   unit: { section: 'surfaces', ref: 'surface', label: '화면' },
-  sections: ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'gaps', 'tasks'],
+  sections: ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'i18n', 'gaps', 'tasks'],
   inferable: ['requirements', 'states'],
   conditionRoles: ['plan'], // 조건 커버리지 계약: 문장을 모두 분류해야 하는 원본 역할
   derived: ['WORKPLAN.md', 'WORKPLAN.html', 'review.html', 'conformance.json', 'conformance-brief.md'],

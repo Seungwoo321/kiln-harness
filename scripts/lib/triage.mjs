@@ -17,7 +17,7 @@ const tryJson = (file) => { try { return JSON.parse(readFileSync(file, 'utf8'));
 
 // 항목 id → 내용 digest. 증분 게이트가 "영향받지 않은 항목이 그대로인가"를 바이트(정규형) 단위로 비교하는 기준이다.
 const sectionsOf = (plan) => reviewedSections(profileForPlan(plan));
-export const itemIds = (plan) => new Map(sectionsOf(plan).flatMap((k) => (plan?.[k] ?? []).map((i) => [i.id, sha256(canonical(i))])));
+export const itemIds = (plan) => new Map(sectionsOf(plan).flatMap((k) => (plan?.[k] ?? []).filter((i) => i.id).map((i) => [i.id, sha256(canonical(i))])));
 
 // ── 스냅샷 ──────────────────────────────────────────────────────────────────
 const runs = (dir) => (existsSync(join(dir, 'history')) ? readdirSync(join(dir, 'history')).filter((n) => /^\d{3,}-[0-9a-f]{8}$/.test(n)).sort() : []);
@@ -66,7 +66,7 @@ export function buildDelta(registry, snap) {
   const changed = [...now.values()].filter((s) => before.has(s.id) && (before.get(s.id).sha256 !== s.sha256 || before.get(s.id).role !== s.role)).map(row);
   const touched = new Set([...changed, ...removed].map((x) => x.id));
   // 영향 후보: 바뀌거나 사라진 입력을 근거(sourceId)로 든 이전 계획서의 항목. 새로 추가된 입력은 근거가 없으므로 후보를 정할 수 없다 — triage 가 판단한다.
-  const candidateIds = sectionsOf(snap.plan).flatMap((k) => snap.plan[k] ?? []).filter((item) => [...sourceIdsIn(item)].some((id) => touched.has(id))).map((i) => i.id).sort();
+  const candidateIds = sectionsOf(snap.plan).flatMap((k) => snap.plan[k] ?? []).filter((item) => item.id && [...sourceIdsIn(item)].some((id) => touched.has(id))).map((i) => i.id).sort();
   const total = new Set([...before.keys(), ...now.keys()]).size;
   return { schemaVersion: 1, kind: 'InputDelta', previous: snap.runId, added, changed, removed, unchanged: total - added.length - changed.length - removed.length,
     changedRatio: total ? Math.round(((added.length + changed.length + removed.length) / total) * 1000) / 1000 : 0, candidateIds };
