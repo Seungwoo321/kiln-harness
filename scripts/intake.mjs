@@ -89,7 +89,7 @@ export function classify(spec) {
       out = { kind: 'code', repo: root, ref: item.ref ?? 'HEAD', paths: item.paths?.length ? item.paths : sub, mode: 'reference' };
     } else {
       const kind = item.kind ?? detectKind(item.role, item.path);
-      if (!kind) { errors.push(`${w}: ${item.role} 역할로 읽을 수 없는 형식 — ${basename(item.path)}. 지원: ${SUPPORTED[item.role]} (이미지·PDF 는 텍스트나 HTML 로 변환해서 준다)`); return null; }
+      if (!kind) { errors.push(`${w}: ${item.role} 역할로 읽을 수 없는 형식 — ${basename(item.path)}. 지원: ${SUPPORTED[item.role]} (PDF 는 원본의 표·비고·각주 관계를 보존하고 페이지 대조한 Markdown(.md)으로, 이미지는 HTML 로 변환해서 준다 — skills/start/SKILL.md 의 PDF 입력 변환 참고)`); return null; }
       const mode = item.mode ?? (st.size > COPY_LIMIT ? 'reference' : 'copy');
       out = { kind, mode, bytes: st.size };
     }
