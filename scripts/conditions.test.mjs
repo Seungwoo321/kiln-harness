@@ -102,7 +102,7 @@ test('해석 게이트: 처리 항목이 없는 조건과 이어지지 않은 �
 });
 
 test('비평: 질문을 결정으로 내리면 조건과 남는 의무의 연결을 결정이 이어받는다', () => {
-  const q = { id: 'Q-1', kind: 'notice', to: 'backend', question: '외부 청구 시스템 전달 형식', options: [], assumption: '결제 수단·금액', impact: [], sourceRefs: ref('L4'), searched: [{ sourceId: 'plan1', scope: '전체' }], conditions: ['C-02'] };
+  const q = { id: 'Q-1', kind: 'notice', to: 'backend', question: '외부 청구 시스템 전달 형식', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: '결제 수단·금액', impact: [], sourceRefs: ref('L4'), searched: [{ sourceId: 'plan1', scope: '전체' }], conditions: ['C-02'] };
   const plan = draft({ questions: [q], requirements: draft().requirements.map((x) => (x.id === 'R-2' ? { ...x, conditions: [] } : x)), excluded: excluded({ a: { obligations: [{ ...residual.a.obligations[0], handledBy: ['Q-1'] }] }, b: { obligations: [{ ...residual.b.obligations[0], handledBy: ['R-3'] }] } }) });
   const demote = { id: 'Q-1', verdict: 'demote', decision: { kind: 'answered-by-source', statement: '결제 수단과 금액을 보낸다', rationale: '원본이 정한다', sourceRefs: ref('L4') } };
   const dir = fixture();

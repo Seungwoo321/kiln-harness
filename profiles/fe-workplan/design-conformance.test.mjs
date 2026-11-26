@@ -253,7 +253,7 @@ test('새 envelope는 v3이며 렌더 skipped면 기존 계약으로 검증한�
   const draft = { ...scope, requirements: [{ id: 'R', surface: 'S', statement: 'X', acceptance: ['X'], basis: 'source', sourceRefs: refs }], states: [{ id: 'ST', surface: 'S', state: 'n/a', region: 'all', condition: 'none', display: 'n/a', basis: 'source', sourceRefs: refs }], components: [], apiBindings: [], i18n: [], gaps: [], questions: [], tasks: [], decisions: [] };
   mkdirSync(join(dir, 'stages')); put(join(dir, 'stages/workplan.draft.json'), draft);
   const r = interpretGate(dir, readJson(join(dir, 'sources.json')), scope);
-  assert.deepEqual(r.violations, []); assert.equal(r.value.schemaVersion, 3);
+  assert.deepEqual(r.violations, []); assert.equal(r.value.schemaVersion, 4);
   assert.deepEqual(validate(dir, { ...r.value, schemaVersion: 2 }), []);
   put(join(dir, 'design-spec-status.json'), seal({ schemaVersion: 1, kind: 'DesignSpecStatus', status: 'failed', reason: 'fixture' }));
   assert.deepEqual(validate(dir, { ...r.value, schemaVersion: 2 }), []);

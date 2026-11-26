@@ -52,11 +52,17 @@
 - operationId·파일 경로·컴포넌트 이름을 지어내지 않는다. extract 앵커에 있는 값만 쓴다(새 파일은 `fileStatus:"new"` 와 이유).
 - **원본이 이미 답한 것은 질문이 아니다 — `decisions` 에 근거와 함께 기록한다.** `decisions` 항목: `{ "id": "D-01", "kind": "answered-by-source|sources-agree|single-source", "statement": "무엇으로 정했나", "rationale": "왜(원본이 어떻게 말하나)", "sourceRefs": [{ "sourceId": "", "locator": "" }] }`.
   `answered-by-source` 원본이 명시함 · `sources-agree` 기획 HTML 과 디자인(등 서로 다른 두 원본)이 같음(원본 2개 이상의 위치) · `single-source` 한쪽에만 있어 그쪽을 따름. locator 는 실재하는 것만 쓴다(스크립트가 원본에서 찾아 확인한다).
-- **`questions` 는 담당자에게 전달되는 두 종류만이다.** 질문마다 `kind`, `sourceRefs`(질문을 낳은 원본 위치), `to`(plan|design|backend), `assumption`, `options`, `impact` 를 쓴다.
+- **`questions` 는 담당자에게 전달되는 두 종류만이다.** 질문마다 `kind`, `sourceRefs`(질문을 낳은 원본 위치), `to`(plan|design|backend), `whyExternal`, `assumption`, `options`, `impact` 를 쓴다.
   - **의도된 변경은 질문이 아니다.** 기획·디자인이 현재 코드와 다른 동작을 분명히 정했고 기존 계약(API·저장·라우팅) 안에서 구현할 수 있으면, 그 변경은 요구사항으로 채택하고 `decisions`(`answered-by-source`)에 근거를 남긴다. 현재 UI와 다르다는 것만으로 `confirm`·`pattern` 을 만들지 않는다. 변경을 위해 계약이 바뀌어야 하는지는 값이 들어오고·저장되고·쓰이고·돌아오는 경로를 코드에서 따라가 확인한다.
   - **구현 책임은 질문이 아니다.** 코드·계약으로 정할 수 있는 일(캐시 무효화, 라우트 추가, 기존 저장값 호환 처리 등)은 `tasks` 로 계획한다. 담당자에게 넘기는 것은 그들만 정할 수 있는 미결정뿐이다 — 질문에는 무엇이 미결정인지와 답에 따라 달라지는 항목(`impact`)을 적는다.
-  - `kind:"confirm"` — **원본끼리 실제로 다르거나, 한쪽이 잘못됐거나, 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있을 때.** `pattern` 은 원본이 그 차이를 의도했다고 볼 근거가 없을 때만이다. `claimType`: `mismatch`(서로 다른 **두 원본**의 위치를 `sourceRefs` 에 모두 단다) · `wrong`(`evidence`: 무엇이 왜 잘못인지) · `pattern`(`evidence`: 어떤 패턴과 어떻게 다른지, `assumption`: 제안).
-  - `kind:"notice"` — **원본 어디에도 정의가 없어 추론·개발 결정한 것의 알림**("이렇게 정했다" = `assumption`). `searched: [{ "sourceId": "", "scope": "찾아본 범위" }]` 를 남기고 **계약(contract)·확정 결정(context) 원본을 반드시 포함**한다 — 질문을 올리기 전에 계약의 해당 절을 실제로 찾아 읽는다. 계약이 이미 정의하면 notice 가 아니라 `decisions` 다.
+  - **한쪽 원본이 차이를 이미 정했으면 질문이 아니다.** `confirm` 을 쓰기 전에 차이를 이루는 각 원본(기획 개요·프로토타입·디자인·계약·구현 커밋·확정 결정)에서 그 차이를 **명시적으로 정했는지** 확인한다. 명시적으로 정한 근거는 다음이다: 설명문이 그 항목의 값·동작을 직접 서술함(예: 응답 필드의 설명, "지원하지 않아 빈 결과로 내린다") · 구현 커밋 메시지가 해당 기획을 근거로 듦 · 더 나중에 작성된 원본이 앞선 원본이 미결로 열어 둔 바로 그 항목을 채움 · 확정 결정(context). 하나라도 있으면:
+    - 따르는 쪽이 FE 의 구현 범위 안이면 `decisions`(`answered-by-source`)로 기록한다. `sourceRefs` 에 정한 원본의 문장 위치(계약의 설명 절·커밋)를 단다. 기획이 열어 둔 항목에 계약이 답했거나, 계약이 '하지 않는다'를 명시한 경우가 여기다.
+    - 그 결정 때문에 **상대 원본의 산출물이 실제와 달라지면**(예: 기획 화면의 해당 영역이 비게 됨) 상대에게 `kind:"notice"` 로 알린다. `assumption` 에 따르는 결정(D-id)과 달라지는 점을 쓴다. 상대에게 묻는 것이 아니라 결정을 받아들이게 하는 알림이다.
+    - 백엔드·기획·디자인에게 이미 정해진 내용을 다시 확인해 달라고 묻지 않는다.
+  - `kind:"confirm"` — **어느 원본도 그 차이를 정하지 않았고** 원본끼리 실제로 다르거나, 한쪽이 잘못됐거나, 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있을 때. `pattern` 은 원본이 그 차이를 의도했다고 볼 근거가 없을 때만이다. `claimType`: `mismatch`(서로 다른 **두 원본**의 위치를 `sourceRefs` 에 모두 단다) · `wrong`(`evidence`: 무엇이 왜 잘못인지) · `pattern`(`evidence`: 어떤 패턴과 어떻게 다른지, `assumption`: 제안). 모든 `confirm` 에 둘을 단다:
+    - `whyExternal` — 코드·계약·원본으로 정할 수 없는 이유. 어느 원본도 이 차이를 명시적으로 정하지 않았다는 점과 답을 낼 수 있는 담당자만 쓴다. "다르다", "확인이 필요하다"는 이유가 아니다.
+    - `searched: [{ "sourceId": "", "scope": "그 원본에서 이 차이의 결정을 찾아본 범위" }]` — 차이를 이루는 원본과 **계약(contract)·확정 결정(context) 원본을 모두 포함**한다. 질문을 올리기 전에 계약의 해당 절을 실제로 읽는다. (시안 동작 충돌 질문(`designEvidence`)은 렌더 증거가 근거라 `searched` 를 면제한다. `whyExternal` 은 필요하다.)
+  - `kind:"notice"` — **원본 어디에도 정의가 없어 추론·개발 결정한 것의 알림**("이렇게 정했다" = `assumption`)이거나 위에서 정한 결정이 상대 산출물을 달라지게 할 때의 알림. `whyExternal`(왜 상대가 알아야 하는가)과 `searched: [{ "sourceId": "", "scope": "찾아본 범위" }]` 를 남기고 **계약(contract)·확정 결정(context) 원본을 반드시 포함**한다 — 질문을 올리기 전에 계약의 해당 절을 실제로 찾아 읽는다. 계약이 이미 정의한 값을 개발이 정한 것처럼 쓰지 않는다. 그 값은 `decisions` 다.
   - `basis:"inferred"` 항목은 반드시 `kind:"notice"` 질문(`question`)을 가리킨다.
 - 추론을 확정값처럼 쓰지 않는다. 기획·디자인·백엔드에 물어야 할 것은 `questions` 로 모은다(`to`, `options`, `assumption`, `impact`).
 - 원본·코드·다른 파일을 수정하지 않는다. 결과 문서에 이 도구 이름을 적지 않는다.

@@ -411,7 +411,7 @@ export function runPipeline(rawDir, opts = {}, injected = {}) {
   const snap = latestSnapshot(dir);
   let incremental = null;
   let triageStat = null;
-  if (!force && !sameSources && !levelChanged && !registry.lineage && prev?.result === 'passed' && prevPlan?.schemaVersion >= 3 && existsSync(join(dir, 'scope.json'))
+  if (!force && !sameSources && !levelChanged && !registry.lineage && prev?.result === 'passed' && prevPlan?.schemaVersion >= 4 && existsSync(join(dir, 'scope.json'))
     && Array.isArray(prevPlan.conditions) && snap && snap.meta.workplanDigest === sha256(canonical(prevPlan)) && snap.meta.level === level) {
     const t = triageStep({ dir, registry, cfg, limits, deps, snap, decisionsChanged: prev.decisionsDigest !== decisionsDigest, profile });
     triageStat = t.stat;

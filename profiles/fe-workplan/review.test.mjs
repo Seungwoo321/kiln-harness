@@ -17,7 +17,7 @@ const basePlan = () => ({
   components: [{ id: 'C1', surface: 'S1', name: 'A', file: 'src/a.tsx', fileStatus: 'existing', ds: { component: 'Btn', match: 'exact', reason: '같다' }, sourceRefs: ref }],
   apiBindings: [{ id: 'A1', operationId: 'getX', surface: 'S1', component: 'C1', trigger: 'load', request: '-', response: '-', errors: '-', sourceRefs: ref }],
   i18n: [], gaps: [{ id: 'G1', surface: 'S1', current: 'c', target: 't' }],
-  questions: [{ id: 'Q1', to: 'plan', question: '?', options: [], assumption: 'x', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '잘못됨', sourceRefs: [{ sourceId: 'plan1', locator: '화면제목' }] }],
+  questions: [{ id: 'Q1', to: 'plan', question: '?', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: 'x', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '잘못됨', sourceRefs: [{ sourceId: 'plan1', locator: '화면제목' }] }],
   tasks: [{ id: 'T1', title: '작업 <b>', files: ['src/a.tsx'], dependsOn: [], covers: ['S1', 'C1', 'A1', 'R1', 'ST1', 'G1'], changeKind: 'new-page' }],
   findings: [{ id: 'F1', severity: 'high', origin: 'design', target: 'R1', message: '<script>alert(1)</script>', recommendation: '확인', stance: 'ask-design' }],
 });

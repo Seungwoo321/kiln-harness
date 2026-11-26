@@ -20,7 +20,7 @@ const draftOut = (extra = {}) => ({
   states: [{ id: 'ST1', surface: 'S1', region: 'r', state: 's', condition: 'c', display: 'd', basis: 'source', sourceRefs: ref }],
   components: [{ id: 'C1', surface: 'S1', name: 'A', file: 'src/a.tsx', fileStatus: 'new', ds: { component: null, match: 'custom', reason: '없다' }, sourceRefs: ref }],
   apiBindings: [], i18n: [], gaps: [{ id: 'G1', surface: 'S1', current: 'c', target: 't' }],
-  questions: [{ id: 'Q1', to: 'plan', question: '마스킹 범위?', options: [], assumption: '전체', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '본문이 모호함', sourceRefs: ref }],
+  questions: [{ id: 'Q1', to: 'plan', question: '마스킹 범위?', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: '전체', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '본문이 모호함', sourceRefs: ref, searched: [{ sourceId: 'plan1', scope: '전체' }] }],
   tasks: [{ id: 'T1', title: '작업', files: ['src/a.tsx'], dependsOn: [], covers: ['S1', 'C1', 'R1', 'ST1', 'G1'], changeKind: 'new-page' }],
   ...extra,
 });
@@ -61,7 +61,7 @@ function previousCase() {
 
 const followUp = (root, content, name = 'next') => makeCase(root, name, 'fx-2', content, 'prev');
 const lineageDraft = (over = {}) => draftOut({
-  questions: [{ id: 'Q2', to: 'plan', question: '아직 모호', options: [], assumption: 'x', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '본문이 모호함', sourceRefs: ref }],
+  questions: [{ id: 'Q2', to: 'plan', question: '아직 모호', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: 'x', impact: ['R1'], kind: 'confirm', claimType: 'wrong', evidence: '본문이 모호함', sourceRefs: ref, searched: [{ sourceId: 'plan1', scope: '전체' }] }],
   lineage: { previous: 'fx-1', inherited: [{ ref: 'R1', status: 'kept', note: '전체 마스킹 유지', target: 'R1' }], resolved: [{ ref: 'Q1', status: 'still-open', note: '새 원본에도 없음', question: 'Q2' }] },
   ...over,
 });

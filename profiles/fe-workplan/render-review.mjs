@@ -107,7 +107,7 @@ export function renderReview(caseDir) {
   parts.push(section('questions', '담당자에게 전달 — 확인 요청 · 알림', `${byTo.length ? `<div class="chips">${byTo.map(([to, n]) => `<span class="chip">${esc(TO[to] ?? to)} <b>${n}</b></span>`).join('')}</div>` : ''}${table(['id', '종류', '대상', '내용', '근거 위치', '선택지', '기본 가정 · 이렇게 정했다', '영향'],
     (p.questions ?? []).map((q) => row(q.id, [
       q.kind ? `<span class="tag ${KIND[q.kind]?.[1] ?? ''}">${esc(KIND[q.kind]?.[0] ?? q.kind)}</span>${q.claimType ? `<br><span class="tag">${esc(CLAIM[q.claimType] ?? q.claimType)}</span>` : ''}` : '',
-      esc(TO[q.to] ?? q.to), text(q.question) + (q.evidence ? `<div class="ev">근거: ${text(q.evidence)}</div>` : ''),
+      esc(TO[q.to] ?? q.to), text(q.question) + (q.evidence ? `<div class="ev">근거: ${text(q.evidence)}</div>` : '') + (q.whyExternal ? `<div class="ev">외부 결정 이유: ${text(q.whyExternal)}</div>` : ''),
       `${refs(q.sourceRefs)}${q.searched ? `<div class="ev">찾아본 범위: ${q.searched.map((s) => `<code>${esc(s.sourceId)}</code> ${esc(s.scope)}`).join(' · ')}</div>` : ''}`,
       list(q.options), text(q.assumption), (q.impact ?? []).map((i) => `<a href="#${esc(i)}">${esc(i)}</a>`).join(', ')])))}`,
     '확인 요청(confirm): 원본끼리 다름·한쪽 잘못·패턴 위반 제안. 알림(notice): 원본에 정의가 없어 추론·개발 결정한 것.'));
