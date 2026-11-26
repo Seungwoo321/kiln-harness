@@ -11,7 +11,7 @@ const PLAN = '<html><body>\n<p>목록에서 항목을 내보낸다.</p>\n<p>내�
 const ref = (locator) => [{ sourceId: 'plan1', locator }];
 const conditions = [{ id: 'C-01', text: '목록에서 항목을 CSV 로 내보낸다', sourceRefs: ref('L2-3') }];
 const scope = { surfaces: [{ id: 'S1', title: '목록', entry: '/list', change: 'new', sourceRefs: ref('L2') }], excluded: [], conditions, nonConditions: [] };
-const question = { id: 'Q-1', kind: 'notice', to: 'plan', question: 'CSV 구분자는 무엇인가?', options: ['쉼표', '탭'], assumption: '쉼표로 한다', impact: ['R-1'], sourceRefs: ref('L3'), searched: [{ sourceId: 'plan1', scope: '전체' }], conditions: ['C-01'] };
+const question = { id: 'Q-1', kind: 'notice', to: 'plan', question: 'CSV 구분자는 무엇인가?', options: ['쉼표', '탭'], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: '쉼표로 한다', impact: ['R-1'], sourceRefs: ref('L3'), searched: [{ sourceId: 'plan1', scope: '전체' }], conditions: ['C-01'] };
 const draft = {
   title: 'T', summary: 'S', newFiles: [{ file: 'src/list.tsx', reason: '새 화면' }], surfaces: scope.surfaces, excluded: [],
   requirements: [{ id: 'R-1', surface: 'S1', statement: 'CSV 로 내보낸다', acceptance: ['a'], basis: 'source', sourceRefs: ref('L3'), conditions: ['C-01'] }],

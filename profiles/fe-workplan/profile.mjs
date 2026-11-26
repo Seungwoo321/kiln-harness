@@ -59,7 +59,7 @@ function promptExtras(stage, ctx) {
 export default {
   id: 'fe-workplan',
   kind: 'WorkPlan',
-  schemaVersion: 3,
+  schemaVersion: 4,
   unit: { section: 'surfaces', ref: 'surface', label: '화면' },
   sections: ['surfaces', 'requirements', 'states', 'components', 'apiBindings', 'i18n', 'gaps', 'tasks'],
   inferable: ['requirements', 'states'],

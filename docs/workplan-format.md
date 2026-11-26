@@ -7,7 +7,7 @@ JSON(`workplan.json`)이 정본이고 Markdown(`WORKPLAN.md`)은 렌더 결과�
 
 | 필드 | 뜻 |
 |---|---|
-| `schemaVersion` | 새 계획서는 `3`. 기존 `1`·`2`도 검증한다 |
+| `schemaVersion` | 새 계획서는 `4`. 기존 `1`~`3`도 검증한다 |
 | `kind` | `WorkPlan` |
 | `caseId` | `sources.json` 의 caseId |
 | `inputDigests` | `sources.json` 각 원본의 sha256 전부. 원본이 바뀌면 검증에서 막힌다 |
@@ -101,12 +101,14 @@ changeKind 와 covers 의 정합(결정적 검사)
 
 | `kind` | 언제 | 필수 |
 |---|---|---|
-| `confirm` | 원본끼리 실제로 다르다 · 한쪽이 잘못됐다 · 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있다 | `claimType`: `mismatch`(서로 다른 **두 원본**의 위치, `sourceRefs` 2개 이상·원본 2개 이상) · `wrong`·`pattern`(`evidence`: 무엇이 왜 잘못·패턴 위반인지) |
+| `confirm` | 어느 원본도 정하지 않은 차이 — 원본끼리 실제로 다르다 · 한쪽이 잘못됐다 · 우리 패턴(현재 코드)에 안 맞아 제안할 것이 있다 | `claimType`: `mismatch`(서로 다른 **두 원본**의 위치, `sourceRefs` 2개 이상·원본 2개 이상) · `wrong`·`pattern`(`evidence`: 무엇이 왜 잘못·패턴 위반인지) · (v4) `searched: [{sourceId, scope}]` — 그 차이의 결정을 찾아본 범위, 계약·확정 결정 원본을 모두 포함(시안 동작 충돌 `designEvidence` 질문은 면제) |
 | `notice` | 원본 어디에도 정의가 없어 추론·개발 결정한 것 — "이렇게 정했다"(`assumption`)를 알린다 | `searched: [{sourceId, scope}]` — 찾아본 범위. 계약(contract)·확정 결정(context) 원본을 모두 포함해야 한다 |
 
-공통: `to`(plan·design·backend) `question` `assumption` `options` `impact` `sourceRefs`(1개 이상, 각 locator 는 그 원본에 실재해야 한다 — 행 범위가 줄 수 안, 앵커 값과 일치, 또는 본문에 그 문자열이 있음).
+공통: `to`(plan·design·backend) `whyExternal`(v4 — 코드·계약·원본으로 정할 수 없는 이유) `question` `assumption` `options` `impact` `sourceRefs`(1개 이상, 각 locator 는 그 원본에 실재해야 한다 — 행 범위가 줄 수 안, 앵커 값과 일치, 또는 본문에 그 문자열이 있음).
 
 `basis:"inferred"` 항목은 반드시 `kind:"notice"` 질문을 `question` 으로 가리킨다.
+
+**한쪽 원본이 차이를 명시적으로 정했으면 질문이 아니다.** 설명문이 값·동작을 직접 서술하거나, 계약이 '하지 않는다'를 명시하거나, 구현 커밋이 해당 기획을 근거로 들거나, 나중에 작성된 원본이 앞선 원본이 미결로 열어 둔 바로 그 항목을 채웠거나, 확정 결정이 있으면 그 차이는 `decisions` 로 기록한다(`sourceRefs` 는 정한 원본의 문장 위치). 그 결정 때문에 상대 원본의 산출물이 달라지면(예: 기획 화면의 영역이 빔) 상대에게 `notice` 로 알린다 — 묻는 것이 아니라 결정을 받아들이게 하는 알림이다. 결정적 검사는 `whyExternal`·`searched` 의 유무와 형식을 본다. 정한 곳이 없다는 판단은 해석 단계가 하고 비평이 원본에 대조해 `demote` 한다.
 
 **질문에서 빠지는 것은 원본이 이미 답한 것뿐이다 — `decisions` 로만 기록한다.** `decisions[]` = `{id, kind, statement, rationale, sourceRefs, surface?}`. `id` 는 `D-` 로 시작한다 — 사용자 결정(`decisions.json`)이 가리키는 다른 항목을 이어받은 기록만 그 항목의 id 를 그대로 쓴다
 

@@ -42,7 +42,7 @@ const errs = (level, over, mutate) => {
   return validate(dir, plan);
 };
 const fitted = (over = {}) => ({ id: 'D-F1', kind: 'fitted', statement: 'JSON 옵션은 indent·encoding', rationale: '기획 L3-4 의 옵션 문구에 맞췄다', sourceRefs: ref, alternatives: [{ option: '옵션 없음', whyNot: '기획이 옵션을 말한다' }], ...over });
-const blocking = (over = {}) => ({ id: 'Q1', kind: 'confirm', claimType: 'wrong', evidence: '두 원본이 서로 배타적', to: 'backend', question: '저장 방식이 둘 다 성립하지 않는다', options: [], assumption: '-', impact: ['R1'], sourceRefs: ref, blocking: true, blockedReason: '어느 쪽으로도 계약을 만족시킬 수 없다', triedFits: [{ option: 'A', whyNot: '계약 위반' }, { option: 'B', whyNot: '기획 위반' }], ...over });
+const blocking = (over = {}) => ({ id: 'Q1', kind: 'confirm', claimType: 'wrong', evidence: '두 원본이 서로 배타적', to: 'backend', question: '저장 방식이 둘 다 성립하지 않는다', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: '-', impact: ['R1'], sourceRefs: ref, blocking: true, blockedReason: '어느 쪽으로도 계약을 만족시킬 수 없다', triedFits: [{ option: 'A', whyNot: '계약 위반' }, { option: 'B', whyNot: '기획 위반' }], ...over });
 
 test('수준 파싱: 0~10 정수만, 구간은 fit(0-3) standard(4-6) strict(7-10)', () => {
   assert.equal(parseLevel('0'), 0); assert.equal(parseLevel(10), 10);

@@ -23,8 +23,8 @@ function fixture() {
   ] }));
   return dir;
 }
-const notice = (over = {}) => ({ id: 'Q1', kind: 'notice', to: 'backend', question: 'JSON 옵션 키는 원본에 정의가 없어 개발이 정했다', options: [], assumption: 'indent·encoding 으로 정했다', impact: ['R2'], sourceRefs: ref, searched: [{ sourceId: 'plan1', scope: '전체' }, { sourceId: 'spec', scope: '전체' }], ...over });
-const confirm = (over = {}) => ({ id: 'Q2', kind: 'confirm', claimType: 'mismatch', to: 'plan', question: '기획과 계약의 형식 수가 다르다', options: [], assumption: '계약을 따른다', impact: ['R1'], sourceRefs: [...ref, { sourceId: 'spec', locator: 'ExportFormat' }], ...over });
+const notice = (over = {}) => ({ id: 'Q1', kind: 'notice', to: 'backend', question: 'JSON 옵션 키는 원본에 정의가 없어 개발이 정했다', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: 'indent·encoding 으로 정했다', impact: ['R2'], sourceRefs: ref, searched: [{ sourceId: 'plan1', scope: '전체' }, { sourceId: 'spec', scope: '전체' }], ...over });
+const confirm = (over = {}) => ({ id: 'Q2', kind: 'confirm', claimType: 'mismatch', to: 'plan', question: '기획과 계약의 형식 수가 다르다', options: [], whyExternal: '어느 원본도 정하지 않아 담당자만 정할 수 있다', assumption: '계약을 따른다', impact: ['R1'], sourceRefs: [...ref, { sourceId: 'spec', locator: 'ExportFormat' }], searched: [{ sourceId: 'plan1', scope: '전체' }, { sourceId: 'spec', scope: '전체' }], ...over });
 const scopeOut = () => ({ surfaces: [{ id: 'S1', title: '화면', entry: '/x', change: 'new', sourceRefs: ref }], excluded: [{ title: '계약', reason: '입력 문서', sourceRefs: [{ sourceId: 'spec', locator: 'ExportFormat' }], residual: { none: '입력 문서일 뿐 남는 의무 없음' } }], conditions: [], nonConditions: [{ sourceId: 'plan1', locator: 'L1-500', reason: '픽스처 — 조건 없음' }] });
 const draft = (questions = [notice()], extra = {}) => ({
   title: 'T', summary: 'S', newFiles: [{ file: 'src/a.tsx', reason: '새 화면' }], surfaces: scopeOut().surfaces, excluded: scopeOut().excluded,

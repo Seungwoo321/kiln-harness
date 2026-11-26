@@ -48,8 +48,9 @@ export function validate(caseDir, planOverride) {
     .flatMap((s) => extracts[s.id].anchors.filter((a) => a.type === 'file').map((a) => a.value)));
 
   // envelope
-  if (![1, 2, 3].includes(plan.schemaVersion)) err('envelope', 'schemaVersion 은 1, 2 또는 3');
+  if (![1, 2, 3, 4].includes(plan.schemaVersion)) err('envelope', 'schemaVersion 은 1, 2, 3 또는 4');
   const v2 = plan.schemaVersion >= 2;
+  const v4 = plan.schemaVersion >= 4;
   const lv = plan.level ?? DEFAULT_LEVEL;
   if (!Number.isInteger(lv) || lv < 0 || lv > 10) err('envelope', `level 은 0~10 정수 (${lv})`);
   const level = tierOf(lv);
@@ -165,20 +166,25 @@ export function validate(caseDir, planOverride) {
       const rs = Array.isArray(q.sourceRefs) ? q.sourceRefs : [];
       if (rs.length === 0) err(w, 'sourceRefs 가 비었음 — 질문을 낳은 원본 위치를 가리켜야 함');
       checkRefs(w, rs);
+      // 담당자에게 넘기는 질문은 코드·계약·원본으로 정할 수 없는 것뿐이다. 어느 원본도 이 차이를 명시적으로 정하지 않았다는 근거를 남긴다(v4).
+      if (v4 && !String(q.whyExternal ?? '').trim()) err(w, 'whyExternal(코드·계약·원본 어디에도 이 차이를 명시적으로 정한 곳이 없어 담당자만 정할 수 있는 이유)이 필요함 — 한쪽 원본이 정했으면 질문이 아니라 decisions 다');
+      // 찾아본 범위: 답을 줄 수 있는 계약·context 를 반드시 포함한다. 시안 동작 충돌(designEvidence)은 렌더 증거가 근거라 제외한다.
+      const checkSearched = (what) => {
+        const searched = Array.isArray(q.searched) ? q.searched : [];
+        if (searched.length === 0) err(w, `${q.kind === 'notice' ? 'notice 는' : 'confirm 은'} ${what}이므로 어느 원본을 찾아봤는지(searched: [{sourceId, scope}])를 남겨야 함`);
+        for (const s of searched) { if (!sourceIds.has(s?.sourceId)) err(w, `searched 의 sourceId 가 등록돼 있지 않음 — ${s?.sourceId}`); if (!s?.scope) err(w, 'searched 항목에 scope(찾아본 범위)가 필요함'); }
+        for (const s of registry.sources.filter((x) => ['contract', 'context'].includes(x.role))) {
+          if (!searched.some((x) => x.sourceId === s.id)) err(w, `${q.kind === 'notice' ? 'notice 는' : 'confirm 은'} 답을 줄 수 있는 원본 ${s.id}(${s.role})를 찾아본 범위에 포함해야 함`);
+        }
+      };
       if (q.kind === 'confirm') {
         oneOf(w, 'claimType', q.claimType, 'claimType');
         if (q.claimType === 'mismatch' && distinctSources(rs) < 2) err(w, '원본끼리 다르다는 확인 요청은 서로 다른 두 원본의 위치(sourceRefs 2개 이상, 원본 2개 이상)가 필요함');
         if (['wrong', 'pattern'].includes(q.claimType) && !q.evidence) err(w, `${q.claimType} 확인 요청은 근거(evidence — 무엇이 왜 잘못·패턴 위반인지)가 필요함`);
+        if (v4 && !q.designEvidence) checkSearched("'어느 원본도 이 차이를 정하지 않았다'는 주장");
       }
-      if (q.kind === 'notice') {
-        // '원본에 정의가 없다'는 주장 — 어느 원본을 찾아봤는지 남기고, 답을 줄 수 있는 계약·context 를 반드시 포함한다.
-        const searched = Array.isArray(q.searched) ? q.searched : [];
-        if (searched.length === 0) err(w, "notice 는 '원본에 정의가 없다'는 주장이므로 어느 원본을 찾아봤는지(searched: [{sourceId, scope}])를 남겨야 함");
-        for (const s of searched) { if (!sourceIds.has(s?.sourceId)) err(w, `searched 의 sourceId 가 등록돼 있지 않음 — ${s?.sourceId}`); if (!s?.scope) err(w, 'searched 항목에 scope(찾아본 범위)가 필요함'); }
-        for (const s of registry.sources.filter((x) => ['contract', 'context'].includes(x.role))) {
-          if (!searched.some((x) => x.sourceId === s.id)) err(w, `notice 는 답을 줄 수 있는 원본 ${s.id}(${s.role})를 찾아본 범위에 포함해야 함`);
-        }
-      }
+      // notice: '원본에 정의가 없다'는 주장 — 어느 원본을 찾아봤는지 남기고, 답을 줄 수 있는 계약·context 를 반드시 포함한다.
+      if (q.kind === 'notice') checkSearched("'원본에 정의가 없다'는 주장");
     }
   });
   // 원본이 이미 답한 것의 기록 — 질문이 아니라 결정(근거·sourceRefs 필수).
